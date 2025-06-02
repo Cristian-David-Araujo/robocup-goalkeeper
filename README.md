@@ -36,7 +36,7 @@ robocup-goalkeeper/
 ## 🚀 Features  
 ✅ **Autonomous Ball Tracking** – Detects and predicts ball movement in real-time.  
 ✅ **High-Speed Decision-Making** – Uses AI-based strategies to react efficiently.  
-✅ **Embedded Control System** – Runs on ESP32, STM32, or similar hardware.  
+✅ **Embedded Control System** – Runs on ESP32. 
 ✅ **Simulation Support** – ROS and Gazebo simulations for testing strategies.  
 
 ## 🔧 Setup & Installation  
