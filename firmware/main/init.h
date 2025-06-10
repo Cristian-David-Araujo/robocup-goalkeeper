@@ -8,15 +8,17 @@
 #include "as5600.h"
 #include "bno055.h"
 #include "platform_esp32s3.h"
+#include "motor.h"
+
 
 #include "utils/gpio_utils.h"
+#include "utils/config_utils.h"
 
 
 // Define macros for error handling
 #define INIT_SUCCESS 0
-#define INIT_ERROR_AS5600 1
-#define INIT_ERROR_BNO055 2
-
+#define INIT_ERROR_AS5600 1  ///< Error code for AS5600 initialization failure
+#define INIT_ERROR_BNO055 2 ///< Error code for BNO055 initialization failure
 
 
 
@@ -25,6 +27,11 @@ extern AS5600_t as5600_1; ///< AS5600 sensor structure
 extern AS5600_t as5600_2; ///< AS5600 sensor structure
 
 extern BNO055_t bno055; ///< BNO055 sensor structure
+
+extern motor_brushless_t motor_0; ///< Motor 0 configuration structure
+extern motor_brushless_t motor_1; ///< Motor 1 configuration structure
+extern motor_brushless_t motor_2; ///< Motor 2 configuration structure
+
 
 /**
  * @brief Initialize the sensors
@@ -38,6 +45,16 @@ extern BNO055_t bno055; ///< BNO055 sensor structure
  *        - INIT_ERROR_BNO055 if BNO055 initialization fails
  */
 int init_sensors(void);
+
+/**
+ * @brief Initialize the motors
+ * This function initializes the brushless motors using LEDC PWM.
+ * It sets up the GPIO pins, LEDC timers, and channels for motor control.
+ * @return int
+ *         - INIT_SUCCESS if initialization is successful
+ *         - INIT_ERROR_MOTOR if motor initialization fails
+ */
+int init_motors(void);
 
 
 #endif // INIT_H

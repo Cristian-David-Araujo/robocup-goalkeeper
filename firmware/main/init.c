@@ -16,14 +16,14 @@ int init_sensors(void)
     if (status != INIT_SUCCESS) {
         return INIT_ERROR_AS5600; // Return error if AS5600 0 initialization fails
     }
-    status = AS5600_Init_ADC(&as5600_1);
-    if (status != INIT_SUCCESS) {
-        return INIT_ERROR_AS5600; // Return error if AS5600 1 initialization fails
-    }
-    status = AS5600_Init_ADC(&as5600_2);
-    if (status != INIT_SUCCESS) {
-        return INIT_ERROR_AS5600; // Return error if AS5600 2 initialization fails
-    }
+    // status = AS5600_Init_ADC(&as5600_1);
+    // if (status != INIT_SUCCESS) {
+    //     return INIT_ERROR_AS5600; // Return error if AS5600 1 initialization fails
+    // }
+    // status = AS5600_Init_ADC(&as5600_2);
+    // if (status != INIT_SUCCESS) {
+    //     return INIT_ERROR_AS5600; // Return error if AS5600 2 initialization fails
+    // }
 
 
     // Initialize BNO055 sensor
@@ -34,5 +34,55 @@ int init_sensors(void)
 
     
     return status; // Return success if all sensors are initialized successfully
+
+}
+
+int init_motors(void)
+{
+    motor_0 = (motor_brushless_t){
+        .pwm_pin_speed = GPIO_MOTOR_0_SIGNAL_OUT_PWM,
+        .pwm_pin_reverse = GPIO_MOTOR_0_REVERSE_OUT_PWM,
+        .resolution_bits = MOTOR_PWM_RESOLUTION_BITS, // Example resolution
+        .max_speed_percent = MOTOR_MAX_SPEED_PERCENT, // Max speed percentage
+        .timer_num = LEDC_TIMER_0, // Use timer 0
+        .speed_mode = LEDC_HIGH_SPEED_MODE, // High speed mode
+        .speed_channel = LEDC_CHANNEL_0, // Channel 0 for speed
+        .reverse_channel = LEDC_CHANNEL_1, // Channel 1 for reverse
+        .is_reversed = false // Initial direction state
+    };
+    if (!motor_init(&motor_0)) {
+        return INIT_ERROR_AS5600; // Return error if motor 0 initialization fails
+    }
+
+    // motor_1 = (motor_brushless_t){
+    //     .pwm_pin_speed = GPIO_MOTOR_1_SIGNAL_OUT_PWM,
+    //     .pwm_pin_reverse = GPIO_MOTOR_1_REVERSE_OUT_PWM,
+    //     .resolution_bits = MOTOR_PWM_RESOLUTION_BITS, // Example resolution
+    //     .max_speed_percent = MOTOR_MAX_SPEED_PERCENT, // Max speed percentage
+    //     .timer_num = LEDC_TIMER_1, // Use timer 1
+    //     .speed_mode = LEDC_HIGH_SPEED_MODE, // High speed mode
+    //     .speed_channel = LEDC_CHANNEL_2, // Channel 2 for speed
+    //     .reverse_channel = LEDC_CHANNEL_3, // Channel 3 for reverse
+    //     .is_reversed = false // Initial direction state
+    // };
+    // if (!motor_init(&motor_1)) {
+    //     return INIT_ERROR_AS5600; // Return error if motor 1 initialization fails
+    // }
+
+    // motor_2 = (motor_brushless_t){
+    //     .pwm_pin_speed = GPIO_MOTOR_2_SIGNAL_OUT_PWM,
+    //     .pwm_pin_reverse = GPIO_MOTOR_2_REVERSE_OUT_PWM,
+    //     .resolution_bits = MOTOR_PWM_RESOLUTION_BITS, // Example resolution
+    //     .max_speed_percent = MOTOR_MAX_SPEED_PERCENT, // Max speed percentage
+    //     .timer_num = LEDC_TIMER_2, // Use timer 2
+    //     .speed_mode = LEDC_HIGH_SPEED_MODE, // High speed mode
+    //     .speed_channel = LEDC_CHANNEL_4, // Channel 4 for speed
+    //     .reverse_channel = LEDC_CHANNEL_5, // Channel 5 for reverse
+    //     .is_reversed = false // Initial direction state
+    // };
+    // if (!motor_init(&motor_2)) {
+    //     return INIT_ERROR_AS5600; // Return error if motor 2 initialization fails
+    // }
+
 
 }
