@@ -8,15 +8,33 @@
 #include "init.h"
 #include "motor.h"
 #include "as5600.h"
+#include "types.h"
+
+// Forward declaration of the sensor reading task function
+void vTaskReadSensors(void *pvParameters);
+void vTaskControl(void *pvParameters);
 
 motor_brushless_t motor_0; // Motor 0 structure
 AS5600_t as5600_0; // AS5600 sensor structure|
+pid_block_handle_t pid;
+
+RawSensorData sensor_data = {0};  // Initialize with zeros
+SemaphoreHandle_t xSensorDataMutex = NULL;
+SemaphoreHandle_t xPidMutex = NULL; // Mutex for PID control
+
 
 void app_main(void)
 {
     init_sensors(); // Initialize sensors
     init_motors();  // Initialize motors
     motor_calibration(&motor_0); // Calibrate the motor
+
+    // Initialize the shared data mutex
+    xSensorDataMutex = xSemaphoreCreateMutex();
+    xPidMutex = xSemaphoreCreateMutex();
+
+    // Start the sensor reading task
+    xTaskCreate(vTaskReadSensors, "SensorTask", 2048, NULL, 5, NULL);
 
     int speed = 0; // Initial speed for the motor
     while (1)
