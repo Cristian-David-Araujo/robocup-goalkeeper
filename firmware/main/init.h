@@ -35,6 +35,7 @@ extern motor_brushless_t motor_1; ///< Motor 1 configuration structure
 extern motor_brushless_t motor_2; ///< Motor 2 configuration structure
 
 extern pid_block_handle_t pid; ///< PID controller handle
+extern pid_parameter_t pid_param; ///< PID controller parameters
 
 
 /**

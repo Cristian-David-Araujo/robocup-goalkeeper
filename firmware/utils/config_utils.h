@@ -7,13 +7,30 @@
 #define MOTOR_MAX_POWER_PERCENT 90 // Maximum power percentage for motors
 
 /* PID MOTOR configuration */
-#define PID_MOTOR_KP 0.5f                // Proportional gain
+#define PID_MOTOR_KP 1.0f                // Proportional gain
 #define PID_MOTOR_KI 0.0f                // Integral gain
 #define PID_MOTOR_KD 0.0f               // Derivative gain
 #define PID_MOTOR_BETA 0.0f              // Beta filter coefficient for derivative term
-#define PID_MOTOR_MAX_OUTPUT 100.0f      // Maximum output of PID controller
-#define PID_MOTOR_MIN_OUTPUT -100.0f     // Minimum output of PID controller
+#define PID_MOTOR_MAX_OUTPUT 20.0f      // Maximum output of PID controller
+#define PID_MOTOR_MIN_OUTPUT -20.0f     // Minimum output of PID controller
 
+
+/** @brief Configuration for sensor reading task
+ * 
+ * This configuration defines the task period, sample rate, and cutoff frequency
+ * for the angular velocity sensor low-pass filter.
+ */
+#define SENSOR_TASK_PERIOD_MS 10
+#define SENSOR_TASK_SAMPLE_RATE_HZ (1000.0f/(SENSOR_TASK_PERIOD_MS)) // Sensor reading task sample rate in Hz
+#define SENSOR_CUTOFF_FREQUENCY_OMEGA_HZ 8.0f // Cutoff frequency for angular velocity sensor low-pass filter
+
+
+/**
+ * @brief Configuration for control loop task
+ * 
+ */
+#define CONTROL_TASK_PERIOD_MS 10 // Control loop task period in milliseconds
+#define CONTROL_TASK_SAMPLE_RATE_HZ (1000.0f/(CONTROL_TASK_PERIOD_MS)) // Control loop sample rate in Hz
 
 
 #endif // CONFIG_UTILS_H

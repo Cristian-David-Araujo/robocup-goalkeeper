@@ -74,8 +74,8 @@ void motor_set_speed(motor_brushless_t *motor, float signed_speed_percent)
     uint32_t duty = (uint32_t)lroundf((effective_speed_percent / 100.0f) * max_duty);
 
     // Log values
-    ESP_LOGI(TAG, "Set motor speed: %.2f%% | Dir: %s | Effective: %.2f%% | Duty: %lu",
-             signed_speed_percent, reverse ? "REVERSE" : "FORWARD", effective_speed_percent, (unsigned long)duty);
+    // ESP_LOGI(TAG, "Set motor speed: %.2f%% | Dir: %s | Effective: %.2f%% | Duty: %lu",
+    //          signed_speed_percent, reverse ? "REVERSE" : "FORWARD", effective_speed_percent, (unsigned long)duty);
 
     // Apply speed duty
     ledc_set_duty(motor->speed_mode, motor->speed_channel, duty);
@@ -112,7 +112,7 @@ void motor_calibration(motor_brushless_t *motor)
     ledc_set_duty(motor->speed_mode, motor->speed_channel, min_duty);
     ledc_update_duty(motor->speed_mode, motor->speed_channel);
     // Wait for 6 seconds
-    vTaskDelay(pdMS_TO_TICKS(8000));
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
     
 }

@@ -7,6 +7,7 @@
 #include "types.h"
 #include "motor.h"
 #include "pid.h"
+#include "config_utils.h" ///< Configuration utilities
 
 #include <stdint.h>
 #include <math.h>
@@ -20,14 +21,17 @@ extern pid_parameter_t pid_param;
 extern motor_brushless_t motor_0;
 
 void vTaskControl(void *pvParameters) {
+
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
     EncoderReading encoder;
 
     float out_pid_motor_0;
-    uint32_t timestamp = 1000000; // 1 second
+    uint32_t timestamp_us = 1000000; // 1 second in microseconds
 
     while (1) {
         // Try to take the mutex
-        if (xSemaphoreTake(xSensorDataMutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+        if (xSemaphoreTake(xSensorDataMutex, portMAX_DELAY) == pdTRUE) {
             // Safely copy the data you need
             encoder = sensor_data.encoders[0];  // Index depends on your setup
 
@@ -43,19 +47,19 @@ void vTaskControl(void *pvParameters) {
 
         motor_set_speed(&motor_0, out_pid_motor_0);
 
-        printf("I,%" PRIu32 ",%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n", timestamp, encoder.omega_rad, pid_param.set_point, 0.0, out_pid_motor_0, 0.0, 0.0);
+        printf("I,%" PRIu32 ",%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n", timestamp_us, encoder.omega_rad, pid_param.set_point, 0.0, out_pid_motor_0, 0.0, 0.0);
 
-        timestamp += 1000000 / 100;  // 100Hz
+        timestamp_us += CONTROL_TASK_PERIOD_MS * 1000; // Increment timestamp by task period in microseconds
 
         // Wait before next check (optional)
-        vTaskDelay(pdMS_TO_TICKS(10));
+        xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(CONTROL_TASK_PERIOD_MS));
     }
 }
 
 extern SemaphoreHandle_t xPidMutex;
 
 
-void uart_task(void* arg) {
+void vTaskUart(void* arg) {
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,

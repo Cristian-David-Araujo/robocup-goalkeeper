@@ -18,7 +18,7 @@
  *  @brief Analog input pins for the three AS5600 encoders.
  *  @{
  */
-#define GPIO_ENCODER_0_IN_ANALOG 6   /**< Analog input pin for Encoder 0 */
+#define GPIO_ENCODER_0_IN_ANALOG 4   /**< Analog input pin for Encoder 0 */
 #define GPIO_ENCODER_1_IN_ANALOG 5   /**< Analog input pin for Encoder 1 */
 #define GPIO_ENCODER_2_IN_ANALOG 6   /**< Analog input pin for Encoder 2 */
 /** @} */

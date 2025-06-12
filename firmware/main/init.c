@@ -1,5 +1,6 @@
 #include "init.h"
 
+
 int init_sensors(void)
 {
 
@@ -94,22 +95,12 @@ int init_motors(void)
 
 int init_pid(void)
 {
-    pid_parameter_t pid_param = {
-        .kp = PID_MOTOR_KP,
-        .ki = PID_MOTOR_KI,
-        .kd = PID_MOTOR_KD,
-        .max_output = PID_MOTOR_MAX_OUTPUT, // Set maximum output for PID controller
-        .min_output = PID_MOTOR_MIN_OUTPUT, // Set minimum output for PID controller
-        .set_point = 0.0f,
-        .cal_type = PID_CAL_TYPE_INCREMENTAL,
-        .beta = PID_MOTOR_BETA // Set beta filter coefficient for derivative term
-    };
 
     pid_config_t pid_config = {
         .init_param = pid_param // Initialize PID parameters
     };
 
-    pid_new_control_block(&pid, &pid_config); // Create a new PID control block with the specified parameters
+    pid_new_control_block(&pid_config, &pid); // Create a new PID control block with the specified parameters
     
     if (pid == NULL) {
         return INIT_ERROR_PID; // Return error if PID initialization fails
