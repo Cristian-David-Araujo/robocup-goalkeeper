@@ -97,7 +97,7 @@ void vTaskReadSensors(void *pvParameters)
         // Safely store the result
         if (xSemaphoreTake(xSensorDataMutex, portMAX_DELAY) == pdTRUE) {
             sensor_data.encoders[0].angle_deg = angle_deg;
-            sensor_data.encoders[0].omega_rad = filtered_omega_rad;
+            sensor_data.encoders[0].omega_rad = SENSOR_ANGULAR_DIRECTION_FORWARD*filtered_omega_rad;
             xSemaphoreGive(xSensorDataMutex);
         }
         

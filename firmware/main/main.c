@@ -50,9 +50,9 @@ void app_main(void)
     // Start the sensor reading task with higher priority
     xTaskCreate(vTaskReadSensors, "Sensor Task", 2048, NULL, 6, NULL);
     // Start the control task with medium priority
-    // xTaskCreate(vTaskControl, "Control Task", 4096, NULL, 5, NULL);
+    xTaskCreate(vTaskControl, "Control Task", 4096, NULL, 5, NULL);
     // Start the UART tunning the pid parameters task
-    // xTaskCreate(vTaskUart, "UARTTask", 2048, NULL, 5, NULL);
+    xTaskCreate(vTaskUart, "UARTTask", 2048, NULL, 5, NULL);
 
-
+    motor_set_speed(&motor_0, 20.0f); // Set initial motor speed to 0
 }

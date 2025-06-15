@@ -112,7 +112,7 @@ void motor_calibration(motor_brushless_t *motor)
     ledc_set_duty(motor->speed_mode, motor->speed_channel, min_duty);
     ledc_update_duty(motor->speed_mode, motor->speed_channel);
     // Wait for 6 seconds
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(pdMS_TO_TICKS(3000));
 
     
 }

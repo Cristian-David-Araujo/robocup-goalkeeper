@@ -10,15 +10,19 @@
 #include "config_utils.h" ///< Configuration utilities
 
 #include <stdint.h>
+#include <string.h>
 #include <math.h>
+
 
 // External shared sensor data and mutex
 extern RawSensorData sensor_data;
 extern SemaphoreHandle_t xSensorDataMutex;
+extern SemaphoreHandle_t xPidMutex;
 
 extern pid_block_handle_t pid;
 extern pid_parameter_t pid_param;
 extern motor_brushless_t motor_0;
+
 
 void vTaskControl(void *pvParameters) {
 
@@ -39,24 +43,21 @@ void vTaskControl(void *pvParameters) {
             xSemaphoreGive(xSensorDataMutex);
         }
 
-        pid_compute(pid, encoder.omega_rad, &out_pid_motor_0);
-        // if (xSemaphoreTake(xPidMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-        //     pid_compute(pid, encoder.omega_rad, &out_pid_motor_0);
-        //     xSemaphoreGive(xPidMutex);
-        // }
+        // pid_compute(pid, encoder.omega_rad, &out_pid_motor_0);
+        if (xSemaphoreTake(xPidMutex, portMAX_DELAY) == pdTRUE) {
+            pid_compute(pid, encoder.omega_rad, &out_pid_motor_0);
+            xSemaphoreGive(xPidMutex);
+        }
 
         motor_set_speed(&motor_0, out_pid_motor_0);
 
         printf("I,%" PRIu32 ",%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n", timestamp_us, encoder.omega_rad, pid_param.set_point, 0.0, out_pid_motor_0, 0.0, 0.0);
-
         timestamp_us += CONTROL_TASK_PERIOD_MS * 1000; // Increment timestamp by task period in microseconds
 
         // Wait before next check (optional)
         xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(CONTROL_TASK_PERIOD_MS));
     }
 }
-
-extern SemaphoreHandle_t xPidMutex;
 
 
 void vTaskUart(void* arg) {
@@ -72,6 +73,7 @@ void vTaskUart(void* arg) {
     uart_flush(UART_NUM_0);
 
     char data[128];
+    char parsed[128];
     float kp, ki, kd, setpoint;
 
     while (1) {
@@ -79,23 +81,37 @@ void vTaskUart(void* arg) {
         if (len > 0) {
             data[len] = '\0';
 
-            if (sscanf(data, "%f %f %f %f", &kp, &ki, &kd, &setpoint) == 4) {
-                if (xSemaphoreTake(xPidMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-                    pid_param.kp = kp;
-                    pid_param.ki = ki;
-                    pid_param.kd = kd;
-                    pid_param.set_point = setpoint;
+            // Look for the string between quotes after "default":
+            char *start = strstr(data, "\"default\":\"");
+            if (start) {
+                start += strlen("\"default\":\"");
+                char *end = strchr(start, '"');
+                if (end && (end - start) < sizeof(parsed)) {
+                    strncpy(parsed, start, end - start);
+                    parsed[end - start] = '\0';
 
-                    pid_update_parameters(pid, &pid_param);
+                    if (sscanf(parsed, "%f %f %f %f", &kp, &ki, &kd, &setpoint) == 4) {
+                        if (xSemaphoreTake(xPidMutex, portMAX_DELAY) == pdTRUE) {
+                            pid_param.kp = kp/ 100.0f; // Scale down the kp value
+                            pid_param.ki = ki / 100.0f; // Scale down the ki value
+                            pid_param.kd = kd / 100.0f; // Scale down the kd value
+                            pid_param.set_point = setpoint;
 
-                    xSemaphoreGive(xPidMutex);
+                            pid_update_parameters(pid, &pid_param);
+                            xSemaphoreGive(xPidMutex);
 
-                    printf("Updated PID: kp=%.2f, ki=%.2f, kd=%.2f, setpoint=%.2f\n", kp, ki, kd, setpoint);
+                            printf("Updated PID: kp=%.2f, ki=%.2f, kd=%.2f, setpoint=%.2f\n", kp, ki, kd, setpoint);
+                        } else {
+                            printf("PID mutex busy. Parameters not updated.\n");
+                        }
+                    } else {
+                        printf("Invalid PID format inside 'default'.\n");
+                    }
                 } else {
-                    printf("PID mutex busy. Parameters not updated.\n");
+                    printf("Invalid or too long 'default' value.\n");
                 }
             } else {
-                printf("Invalid input format. Use: kp ki kd setpoint\n");
+                printf("Invalid format. Expected: {\"default\":\"kp ki kd setpoint\"}\n");
             }
         }
     }
