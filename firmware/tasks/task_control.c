@@ -62,56 +62,83 @@ void vTaskControl(void *pvParameters) {
     }
 }
 
-
-void vTaskUart(void* arg) {
+void uart_init_task() {
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
+        .parity    = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
     };
-    uart_param_config(UART_NUM_0, &uart_config);
-    uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0);
-    uart_flush(UART_NUM_0);
 
-    char data[128];
-    char parsed[64];
-    float setpoint;
+    uart_param_config(UART_NUM_0, &uart_config);
+    uart_driver_install(UART_NUM_0, UART_RX_BUFFER_SIZE * 2, 0, UART_QUEUE_SIZE, &uart_queue, 0);
+    uart_flush(UART_NUM_0);
+    uart_enable_rx_intr(UART_NUM_0);
+}
+
+void vTaskUartHandler(void *arg) {
+    uart_event_t event;
+    char d;
 
     while (1) {
-        int len = uart_read_bytes(UART_NUM_0, (uint8_t*)data, sizeof(data) - 1, pdMS_TO_TICKS(1000));
-        if (len > 0) {
-            data[len] = '\0';
-
-            // Find the string after "default":
-            char *start = strstr(data, "\"default\":\"");
-            if (start) {
-                start += strlen("\"default\":\"");
-                char *end = strchr(start, '"');
-                if (end && (end - start) < sizeof(parsed)) {
-                    strncpy(parsed, start, end - start);
-                    parsed[end - start] = '\0';
-
-                    if (sscanf(parsed, "%f", &setpoint) == 1) {
-                        if (xSemaphoreTake(xPidMutex, portMAX_DELAY) == pdTRUE) {
-                            pid_param.set_point = setpoint;
-                            pid_update_parameters(pid, &pid_param);
-                            xSemaphoreGive(xPidMutex);
-
-                            printf("Updated setpoint: %.2f\n", setpoint);
-                        } else {
-                            printf("PID mutex busy. Setpoint not updated.\n");
+        if (xQueueReceive(uart_queue, (void *)&event, portMAX_DELAY)) {
+            if (event.type == UART_DATA) {
+                for (int i = 0; i < event.size; ++i) {
+                    if (uart_read_bytes(UART_NUM_0, (uint8_t *)&d, 1, pdMS_TO_TICKS(10)) > 0) {
+                        if (d == '\n' || d == '\r') {
+                            uart_buffer[uart_buffer_index] = '\0';
+                            uart_buffer_index = 0;
+                            // Notify parser task
+                            xTaskNotifyGive(xHandleParserTask);
+                        } else if (uart_buffer_index < UART_RX_BUFFER_SIZE - 1) {
+                            uart_buffer[uart_buffer_index++] = d;
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+void vTaskUartParser(void *arg) {
+    float kp, ki, kd, setpoint;
+    char parsed[128];
+
+    xHandleParserTask = xTaskGetCurrentTaskHandle();
+
+    while (1) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        char *start = strstr(uart_buffer, "\"default\":\"");
+        if (start) {
+            start += strlen("\"default\":\"");
+            char *end = strchr(start, '"');
+            if (end && (end - start) < sizeof(parsed)) {
+                strncpy(parsed, start, end - start);
+                parsed[end - start] = '\0';
+
+                if (sscanf(parsed, "%f", &setpoint) == 1) {
+                    if (xSemaphoreTake(xPidMutex, portMAX_DELAY) == pdTRUE) {
+                        pid_param.set_point = setpoint;
+
+                        pid_update_parameters(pid, &pid_param);
+                        xSemaphoreGive(xPidMutex);
+
+                        printf("Updated PID: setpoint=%.2f\n", setpoint);
                     } else {
-                        printf("Invalid number format inside 'default'.\n");
+                        printf("PID mutex busy.\n");
                     }
                 } else {
-                    printf("Invalid or too long 'default' value.\n");
+                    printf("Invalid format inside 'default'.\n");
                 }
             } else {
-                printf("Invalid format. Expected: {\"default\":\"10\"}\n");
+                printf("Value too long or malformed.\n");
             }
+        } else {
+            printf("Expected format: {\"default\":\"setpoint\"}\n");
         }
     }
 }
