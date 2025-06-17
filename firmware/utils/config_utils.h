@@ -21,9 +21,9 @@
  * This configuration defines the task period, sample rate, and cutoff frequency
  * for the angular velocity sensor low-pass filter.
  */
-#define SENSOR_TASK_PERIOD_MS 10
+#define SENSOR_TASK_PERIOD_MS 2
 #define SENSOR_TASK_SAMPLE_RATE_HZ (1000.0f/(SENSOR_TASK_PERIOD_MS)) // Sensor reading task sample rate in Hz
-#define SENSOR_CUTOFF_FREQUENCY_OMEGA_HZ 2.0f // Cutoff frequency for angular velocity sensor low-pass filter
+#define SENSOR_CUTOFF_FREQUENCY_OMEGA_HZ 1.0f // Cutoff frequency for angular velocity sensor low-pass filter
 #define SENSOR_ANGULAR_DIRECTION_FORWARD -1 // Angular velocity sensor direction (1 for forward, -1 for backward)
 
 
@@ -31,7 +31,7 @@
  * @brief Configuration for control loop task
  * 
  */
-#define CONTROL_TASK_PERIOD_MS 10 // Control loop task period in milliseconds
+#define CONTROL_TASK_PERIOD_MS 2 // Control loop task period in milliseconds
 #define CONTROL_TASK_SAMPLE_RATE_HZ (1000.0f/(CONTROL_TASK_PERIOD_MS)) // Control loop sample rate in Hz
 
 
