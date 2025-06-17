@@ -10,10 +10,15 @@
 #include "as5600.h"
 #include "types.h"
 
+// Forward declaration for UART initialization if not included by a header
+void uart_init_task(void);
+
 // Forward declaration of the sensor reading task function
 void vTaskReadSensors(void *pvParameters);
 void vTaskControl(void *pvParameters);
 void vTaskUart(void* arg);
+void vTaskUartHandler(void *arg);
+void vTaskUartParser(void *arg);
 
 motor_brushless_t motor_0; // Motor 0 structure
 AS5600_t as5600_0; // AS5600 sensor structure|
@@ -34,12 +39,14 @@ SemaphoreHandle_t xSensorDataMutex = NULL;
 SemaphoreHandle_t xPidMutex = NULL; // Mutex for PID control
 SemaphoreHandle_t xADCMutex = NULL; // Mutex for ADC operations
 
+TaskHandle_t xHandleParserTask;
 
 void app_main(void)
 {
     init_sensors(); // Initialize sensors
     init_motors();  // Initialize motors
     init_pid(); // Initialize PID controller
+    uart_init_task(); // Initialize UART
     motor_calibration(&motor_0); // Calibrate the motor
 
     // Initialize the shared data mutex
@@ -47,12 +54,13 @@ void app_main(void)
     xPidMutex = xSemaphoreCreateMutex();
     xADCMutex = xSemaphoreCreateMutex(); // Create mutex for ADC operations
 
+    
+
     // Start the sensor reading task with higher priority
     xTaskCreate(vTaskReadSensors, "Sensor Task", 2048, NULL, 6, NULL);
     // Start the control task with medium priority
     xTaskCreate(vTaskControl, "Control Task", 4096, NULL, 5, NULL);
     // Start the UART tunning the pid parameters task
-    xTaskCreate(vTaskUart, "UARTTask", 2048, NULL, 5, NULL);
-
-    motor_set_speed(&motor_0, 20.0f); // Set initial motor speed to 0
+    xTaskCreate(vTaskUartHandler, "uart_handler", 4096, NULL, 10, NULL);
+    xTaskCreate(vTaskUartParser, "uart_parser", 4096, NULL, 10, &xHandleParserTask);
 }
