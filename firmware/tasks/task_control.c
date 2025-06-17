@@ -51,7 +51,10 @@ void vTaskControl(void *pvParameters) {
 
         motor_set_speed(&motor_0, out_pid_motor_0);
 
-        printf("I,%" PRIu32 ",%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n", timestamp_us, encoder.omega_rad, pid_param.set_point, 0.0, out_pid_motor_0, 0.0, 0.0);
+        // Print the output every 20 ms
+        if ((timestamp_us % 20000) == 0) { // cada 20 ms
+            printf("I,%" PRIu32 ",%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n", timestamp_us, encoder.omega_rad, pid_param.set_point, 0.0, out_pid_motor_0, 0.0, 0.0);
+        }
         timestamp_us += CONTROL_TASK_PERIOD_MS * 1000; // Increment timestamp by task period in microseconds
 
         // Wait before next check (optional)
