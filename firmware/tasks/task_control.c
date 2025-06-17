@@ -73,15 +73,15 @@ void vTaskUart(void* arg) {
     uart_flush(UART_NUM_0);
 
     char data[128];
-    char parsed[128];
-    float kp, ki, kd, setpoint;
+    char parsed[64];
+    float setpoint;
 
     while (1) {
         int len = uart_read_bytes(UART_NUM_0, (uint8_t*)data, sizeof(data) - 1, pdMS_TO_TICKS(1000));
         if (len > 0) {
             data[len] = '\0';
 
-            // Look for the string between quotes after "default":
+            // Find the string after "default":
             char *start = strstr(data, "\"default\":\"");
             if (start) {
                 start += strlen("\"default\":\"");
@@ -90,28 +90,24 @@ void vTaskUart(void* arg) {
                     strncpy(parsed, start, end - start);
                     parsed[end - start] = '\0';
 
-                    if (sscanf(parsed, "%f %f %f %f", &kp, &ki, &kd, &setpoint) == 4) {
+                    if (sscanf(parsed, "%f", &setpoint) == 1) {
                         if (xSemaphoreTake(xPidMutex, portMAX_DELAY) == pdTRUE) {
-                            pid_param.kp = kp/ 100.0f; // Scale down the kp value
-                            pid_param.ki = ki / 100.0f; // Scale down the ki value
-                            pid_param.kd = kd / 100.0f; // Scale down the kd value
                             pid_param.set_point = setpoint;
-
                             pid_update_parameters(pid, &pid_param);
                             xSemaphoreGive(xPidMutex);
 
-                            printf("Updated PID: kp=%.2f, ki=%.2f, kd=%.2f, setpoint=%.2f\n", kp, ki, kd, setpoint);
+                            printf("Updated setpoint: %.2f\n", setpoint);
                         } else {
-                            printf("PID mutex busy. Parameters not updated.\n");
+                            printf("PID mutex busy. Setpoint not updated.\n");
                         }
                     } else {
-                        printf("Invalid PID format inside 'default'.\n");
+                        printf("Invalid number format inside 'default'.\n");
                     }
                 } else {
                     printf("Invalid or too long 'default' value.\n");
                 }
             } else {
-                printf("Invalid format. Expected: {\"default\":\"kp ki kd setpoint\"}\n");
+                printf("Invalid format. Expected: {\"default\":\"10\"}\n");
             }
         }
     }
