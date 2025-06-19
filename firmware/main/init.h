@@ -1,6 +1,8 @@
 #ifndef INIT_H
 #define INIT_H
 
+/* ESP LOGS*/
+#include "esp_log.h"
 
 
 
@@ -21,21 +23,20 @@
 #define INIT_ERROR_AS5600 1  ///< Error code for AS5600 initialization failure
 #define INIT_ERROR_BNO055 2 ///< Error code for BNO055 initialization failure
 #define INIT_ERROR_PID 3 ///< Error code for PID initialization failure
+#define INIT_ERROR_MOTOR 4 ///< Error code for motor initialization failure
 
 
 
-extern AS5600_t as5600_0; ///< AS5600 sensor structure
-extern AS5600_t as5600_1; ///< AS5600 sensor structure
-extern AS5600_t as5600_2; ///< AS5600 sensor structure
+extern AS5600_t as5600[3]; ///< Array of AS5600 sensors
 
 extern BNO055_t bno055; ///< BNO055 sensor structure
 
-extern motor_brushless_t motor_0; ///< Motor 0 configuration structure
-extern motor_brushless_t motor_1; ///< Motor 1 configuration structure
-extern motor_brushless_t motor_2; ///< Motor 2 configuration structure
+extern motor_brushless_t motor[3]; ///< Array of brushless motors
 
-extern pid_block_handle_t pid; ///< PID controller handle
+extern pid_block_handle_t pid[3]; ///< Array of PID controllers for each motor
 extern pid_parameter_t pid_param; ///< PID controller parameters
+
+extern adc_oneshot_unit_handle_t shared_adc_handle; ///< Shared ADC handle for ADC operations
 
 
 /**

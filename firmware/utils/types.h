@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define NUM_ENCODERS 1  // Update if you have more encoders
+#define NUM_ENCODERS 3  // Update if you have more encoders
 
 /// @brief Per-encoder data
 typedef struct {

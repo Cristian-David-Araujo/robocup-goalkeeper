@@ -23,8 +23,7 @@ extern SemaphoreHandle_t xSensorDataMutex;
 extern SemaphoreHandle_t xADCMutex; // Mutex for ADC operations
 
 // External AS5600 sensor instance
-extern AS5600_t as5600_0;
-
+extern AS5600_t as5600[3]; ///< Array of AS5600 sensors
 /// Optional handle to manage task externally
 TaskHandle_t xTaskReadSensorsHandle = NULL;
 
@@ -66,46 +65,59 @@ void vTaskReadSensors(void *pvParameters)
     TickType_t xLastWakeTime = xTaskGetTickCount();
 
     // Initialize state
-    angular_velocity_t encoder_state = {
-        .last_angle_deg = AS5600_ADC_GetAngle(&as5600_0),
-        .last_time_us   = esp_timer_get_time()
-    };
+    angular_velocity_t encoder_state[3];
+    int64_t now_us = esp_timer_get_time();
+    for (int i = 0; i < 3; i++) {
+        encoder_state[i].last_angle_deg = AS5600_ADC_GetAngle(&as5600[i]);
+        encoder_state[i].last_time_us = now_us;
+    }
 
     float beta = exp(-2 * M_PI * SENSOR_CUTOFF_FREQUENCY_OMEGA_HZ / SENSOR_TASK_SAMPLE_RATE_HZ);  // 10Hz cutoff frequency
-    float filtered_omega_rad = 0.0f; // Filtered angular velocity
+    float filtered_omega_rad[3] = {0.0f, 0.0f, 0.0f}; // Filtered angular velocities for each encoder
+    float angle_deg[3] = {0.0f, 0.0f, 0.0f}; // Current angles in degrees for each encoder
+    float omega_rad[3] = {0.0f, 0.0f, 0.0f}; // Angular velocities in rad/s for each encoder
 
-    float angle_deg = 0.0f; // Current angle in degrees
-    int64_t now_us = 0; // Current time in microseconds
-    float omega_rad = 0.0f; // Current angular velocity in rad/s
-
-    // uint32_t timestamp_us = 1000000; // 1 second in microseconds
+    uint32_t timestamp_us = 1000000; // 1 second in microseconds
+    int print_counter = 0;
 
     while (true) {
         //Take mutex to read the encoder angle
         if (xSemaphoreTake(xADCMutex, portMAX_DELAY) == pdTRUE) {
             // Read the angle from the AS5600 sensor
-            angle_deg = AS5600_ADC_GetAngle(&as5600_0);
+            for (int i = 0; i < 3; i++) {
+                angle_deg[i] = AS5600_ADC_GetAngle(&as5600[i]);
+            }
+            // Release the mutex after reading
             xSemaphoreGive(xADCMutex);
         }
         // angle_deg = AS5600_ADC_GetAngle(&as5600_0);
         now_us  = esp_timer_get_time();
-        omega_rad = compute_angular_velocity(&encoder_state, angle_deg, now_us);
 
-        // Apply low-pass filter to smooth the angle Vn = beta * Vn-1 + (1 - beta) * Vn
-        filtered_omega_rad = beta * filtered_omega_rad + (1.0f - beta) * omega_rad;
+        // Compute angular velocity for each encoder
+        for (int i = 0; i < 3; i++) {
+            // Compute angular velocity in rad/s
+            omega_rad[i] = compute_angular_velocity(&encoder_state[i], angle_deg[i], now_us);
+            // Apply low-pass filter to smooth the angle Vn = beta * Vn-1 + (1 - beta) * Vn
+            filtered_omega_rad[i] = beta * filtered_omega_rad[i] + (1.0f - beta) * omega_rad[i];
+        }
+        
 
         // Safely store the result
         if (xSemaphoreTake(xSensorDataMutex, portMAX_DELAY) == pdTRUE) {
-            sensor_data.encoders[0].angle_deg = angle_deg;
-            sensor_data.encoders[0].omega_rad = SENSOR_ANGULAR_DIRECTION_FORWARD*filtered_omega_rad;
+            for (int i = 0; i < 3; i++) {
+                sensor_data.encoders[i].angle_deg = angle_deg[i];
+                sensor_data.encoders[i].omega_rad = SENSOR_ANGULAR_DIRECTION_FORWARD(i) * filtered_omega_rad[i]; // Forward direction
+            }
             xSemaphoreGive(xSensorDataMutex);
         }
         
 
         // Print the result for debugging
-        // printf("Encoder 0: Angle=%.2f deg, Omega=%.4f rad/s\n", angle_deg, filtered_omega_rad);
-        // printf("I,%" PRIu32 ",%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n", timestamp_us, angle_deg, 0.0, 0.0, omega_rad, filtered_omega_rad, 0.0);
-        // timestamp_us += SENSOR_TASK_PERIOD_MS * 1000; // Increment timestamp by task period in microseconds
+        if (++print_counter >= 10) {
+            printf("I,%" PRIu32 ",%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n", timestamp_us, angle_deg[0], angle_deg[1], angle_deg[2], SENSOR_ANGULAR_DIRECTION_FORWARD(0)*filtered_omega_rad[0], SENSOR_ANGULAR_DIRECTION_FORWARD(1)*filtered_omega_rad[1], SENSOR_ANGULAR_DIRECTION_FORWARD(2)*filtered_omega_rad[2]);
+            print_counter = 0;
+        }
+        timestamp_us += SENSOR_TASK_PERIOD_MS * 1000; // Increment timestamp by task period in microseconds
 
         // Wait for the next cycle
         xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(SENSOR_TASK_PERIOD_MS));

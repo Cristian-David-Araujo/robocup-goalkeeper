@@ -115,6 +115,14 @@ AS5600_reg_t AS5600_RegStrToAddr(AS5600_t *as5600, const char *reg_str);
 void AS5600_InitADC(AS5600_t *as5600);
 
 /**
+ * @brief Initialize the ADC driver with a shared handle
+ * 
+ * @param as5600 
+ * @param shared_handle Shared ADC handle
+ */
+void AS5600_InitADC_2(AS5600_t *as5600, adc_oneshot_unit_handle_t shared_handle);
+
+/**
  * @brief Deinitialize the ADC driver
  * 
  * @param as5600 

@@ -19,14 +19,20 @@ bool motor_init(motor_brushless_t *motor) {
         .timer_num = motor->timer_num,
         .clk_cfg = LEDC_AUTO_CLK
     };
-    if (ledc_timer_config(&timer_conf) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure LEDC timer");
-        return false;
+    // Configure timer only if not already configured for this timer_num and speed_mode
+    static bool timer_initialized[LEDC_TIMER_MAX][2] = { false };
+    int mode_idx = (motor->speed_mode == LEDC_LOW_SPEED_MODE) ? 1 : 0;
+    if (!timer_initialized[motor->timer_num][mode_idx]) {
+        if (ledc_timer_config(&timer_conf) != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to configure LEDC timer");
+            return false;
+        }
+        timer_initialized[motor->timer_num][mode_idx] = true;
     }
 
     ledc_channel_config_t speed_channel = {
         .channel    = motor->speed_channel,
-        .duty       = (uint32_t)(motor->max_speed_percent * ((1 << motor->resolution_bits) - 1) /100), // Set initial duty top of MOTOR_MAX_SPEED_PERCENT
+        .duty       = (uint32_t)(motor->min_speed_percent * ((1 << motor->resolution_bits) - 1) /100), // Set initial duty top of MOTOR_MAX_SPEED_PERCENT
         .gpio_num   = motor->pwm_pin_speed,
         .speed_mode = motor->speed_mode,
         .hpoint     = 0,
@@ -113,6 +119,26 @@ void motor_calibration(motor_brushless_t *motor)
     ledc_update_duty(motor->speed_mode, motor->speed_channel);
     // Wait for 6 seconds
     vTaskDelay(pdMS_TO_TICKS(3000));
+}
 
-    
+void motor_calibration3(motor_brushless_t *motor_0, motor_brushless_t *motor_1, motor_brushless_t *motor_2)
+{
+    if (!motor_0 || !motor_1 || !motor_2) return;
+
+    // Wait for 2 seconds
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    // Set speed to min_speed_percent without using the motor_set_speed function
+    uint32_t min_duty = (motor_0->min_speed_percent * ((1 << motor_0->resolution_bits) - 1)) / 100;
+    // Set speed for motor 0
+    ledc_set_duty(motor_0->speed_mode, motor_0->speed_channel, min_duty);
+    // Set speed for motor 1
+    ledc_set_duty(motor_1->speed_mode, motor_1->speed_channel, min_duty); 
+    // Set speed for motor 2
+    ledc_set_duty(motor_2->speed_mode, motor_2->speed_channel, min_duty);
+    // Update duty for all motors
+    ledc_update_duty(motor_1->speed_mode, motor_1->speed_channel);
+    ledc_update_duty(motor_0->speed_mode, motor_0->speed_channel);
+    ledc_update_duty(motor_2->speed_mode, motor_2->speed_channel);
+    // Wait for 6 seconds
+    vTaskDelay(pdMS_TO_TICKS(3000));
 }

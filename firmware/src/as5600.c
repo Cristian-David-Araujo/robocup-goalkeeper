@@ -152,11 +152,20 @@ bool AS5600_IsValidWriteReg(AS5600_t *as5600, AS5600_reg_t reg)
 void AS5600_InitADC(AS5600_t *as5600)
 {
     // ADC pin OUT configuration 
-    if (!adc_init(&as5600->adc_handle, as5600->out)) {
-        printf("ADC initialization failed");
-        return;
+    if (adc_init(&as5600->adc_handle, as5600->out)) {
+        printf("ADC initialization successful\n");
+    } 
+}
+
+void AS5600_InitADC_2(AS5600_t *as5600, adc_oneshot_unit_handle_t shared_handle)
+{
+    if (adc_config_channel(&as5600->adc_handle, as5600->out, shared_handle)) {
+        printf("AS5600 on GPIO %d initialized.\n", as5600->out);
+    } else {
+        printf("Failed to init AS5600 on GPIO %d\n", as5600->out);
     }
 }
+
 
 void AS5600_DeinitADC(AS5600_t *as5600)
 {

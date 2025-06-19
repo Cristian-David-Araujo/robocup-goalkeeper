@@ -235,8 +235,53 @@ void i2c_write(i2c_t *i2c, uint8_t *data, size_t len)
 // ---------------------- ADC ---------------------------------
 // -------------------------------------------------------------
 
+bool adc_create_unit(adc_oneshot_unit_handle_t *handle)
+{
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_UNIT_1
+    };
+    return adc_oneshot_new_unit(&init_config, handle) == ESP_OK;
+}
+
+bool adc_config_channel(adc_t *adc, uint8_t gpio_out, adc_oneshot_unit_handle_t shared_handle)
+{
+    esp_err_t ret;
+
+    adc->gpio_out = gpio_out;
+    adc->unit = ADC_UNIT_1;
+
+    // Convertir GPIO a canal
+    ESP_GOTO_ON_ERROR(adc_oneshot_io_to_channel(gpio_out, &adc->unit, &adc->chan), err, "ADC", "GPIO->Canal falló");
+
+    // Configurar canal
+    adc_oneshot_chan_cfg_t config = {
+        .atten = ADC_ATTEN,
+        .bitwidth = ADC_BIT_WIDTH
+    };
+    ESP_GOTO_ON_ERROR(adc_oneshot_config_channel(shared_handle, adc->chan, &config), err, "ADC", "Config canal falló");
+
+    // Calibración
+    adc_cali_curve_fitting_config_t cali_config = {
+        .unit_id = ADC_UNIT_1,
+        .chan = adc->chan,
+        .atten = ADC_ATTEN,
+        .bitwidth = ADC_BIT_WIDTH
+    };
+    ESP_GOTO_ON_ERROR(adc_cali_create_scheme_curve_fitting(&cali_config, &adc->adc_cali_handle), err, "ADC", "Calibración falló");
+
+    adc->adc_handle = shared_handle;
+    adc->is_calibrated = true;
+    return true;
+
+err:
+    return false;
+}
+
+
+
 bool adc_init(adc_t *adc, uint8_t gpio_out)
 {
+    
     esp_err_t ret = ESP_OK;
 
     adc->gpio_out = gpio_out;
@@ -281,6 +326,72 @@ bool adc_init(adc_t *adc, uint8_t gpio_out)
 
     return true;
 
+err:
+    return false;
+}
+
+bool adc_new_unit(adc_t *adc, uint8_t gpio_out)
+{    
+    esp_err_t ret = ESP_OK;
+
+    adc->gpio_out = gpio_out;
+
+    // From GPIO to ADC channel
+    adc->unit = ADC_CONF_UNIT;
+    ESP_GOTO_ON_ERROR(adc_oneshot_io_to_channel(adc->gpio_out, &adc->unit, &adc->chan), err, TAG_ADC, "adc io to channel failed");
+    ESP_LOGI(TAG_ADC, "ADC channel: %d", adc->chan);
+
+    // ------------- ADC pin OUT configuration ------------- //
+    // The DIG ADC2 controller of ESP32-S3 doesn’t work properly (pag. 1444).
+    // So we need to use the ADC1 controller (GPIO-1 to GPIO-10, pag. 318).
+
+    // ADC Init
+    adc_oneshot_unit_handle_t adc_handle;
+    adc_oneshot_unit_init_cfg_t init_config1 = {
+        .unit_id = ADC_CONF_UNIT,
+    };
+    ESP_GOTO_ON_ERROR(adc_oneshot_new_unit(&init_config1, &adc_handle), err, TAG_ADC, "adc init failed");
+    adc->adc_handle = adc_handle;
+
+    return true;
+err:
+    return false;
+}
+
+bool adc_new_channel_cali(adc_t *adc, uint8_t gpio_out, adc_oneshot_unit_handle_t adc_handle)
+{
+    esp_err_t ret = ESP_OK;
+
+    adc->gpio_out = gpio_out;
+
+    // From GPIO to ADC channel
+    adc->unit = ADC_CONF_UNIT;
+    ESP_GOTO_ON_ERROR(adc_oneshot_io_to_channel(adc->gpio_out, &adc->unit, &adc->chan), err, TAG_ADC, "adc io to channel failed");
+    ESP_LOGI(TAG_ADC, "ADC channel: %d", adc->chan);
+
+    // ADC Config
+    adc_oneshot_chan_cfg_t config = {
+        .atten = ADC_ATTEN,
+        .bitwidth = ADC_BIT_WIDTH,
+    };
+    ESP_GOTO_ON_ERROR(adc_oneshot_config_channel(adc_handle, adc->chan, &config), err, TAG_ADC, "adc config failed");
+
+    // ADC calibration 
+    adc_cali_handle_t cali_handle = NULL;
+    adc_cali_curve_fitting_config_t cali_config = {
+        .unit_id = ADC_CONF_UNIT,
+        .chan = adc->chan,
+        .atten = ADC_ATTEN,
+        .bitwidth = ADC_BIT_WIDTH,
+    };
+    adc->is_calibrated = false;
+    ESP_GOTO_ON_ERROR(adc_cali_create_scheme_curve_fitting(&cali_config, &cali_handle), err, TAG_ADC, "adc calibration failed");
+    
+    adc->is_calibrated = true;
+    adc->adc_cali_handle = cali_handle;
+    adc->adc_handle = adc_handle;
+
+    return true;
 err:
     return false;
 }

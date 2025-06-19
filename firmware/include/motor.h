@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include "driver/ledc.h"
 
+#include "config_utils.h" // For motor configuration constants
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -59,6 +61,18 @@ void motor_stop(motor_brushless_t *motor);
  * @param motor Pointer to the motor instance
  */
 void motor_calibration(motor_brushless_t *motor);
+
+/**
+ * @brief Calibrate three brushless motors
+ * 
+ * This function calibrates three motors by calling motor_calibration for each.
+ * It is typically used during system initialization to ensure all motors are in a known state.
+ * 
+ * @param motor_0 Pointer to the first motor instance
+ * @param motor_1 Pointer to the second motor instance
+ * @param motor_2 Pointer to the third motor instance
+ */
+void motor_calibration3(motor_brushless_t *motor_0, motor_brushless_t *motor_1, motor_brushless_t *motor_2);
 
 #ifdef __cplusplus
 }

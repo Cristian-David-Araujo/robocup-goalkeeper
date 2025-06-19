@@ -228,6 +228,26 @@ typedef struct
 
 
 /**
+ * @brief Create a new ADC unit
+ * 
+ * @param handle Pointer to the ADC unit handle
+ * @return true if the ADC unit is created successfully
+ * @return false if the ADC unit creation failed
+ */
+bool adc_create_unit(adc_oneshot_unit_handle_t *handle);
+
+/**
+ * @brief Configure the ADC channel with the specified GPIO pin and shared ADC handle
+ * 
+ * @param adc struct to store the ADC configuration
+ * @param gpio_out GPIO pin connected to the ADC output
+ * @param shared_handle Shared ADC handle for calibration
+ * @return true if the ADC channel is configured correctly
+ * @return false if the ADC channel configuration failed
+ */
+bool adc_config_channel(adc_t *adc, uint8_t gpio_out, adc_oneshot_unit_handle_t shared_handle);
+
+/**
  * @brief Initialize the ADC driver
  * 
  * @param adc struct to store the ADC configuration
@@ -236,6 +256,10 @@ typedef struct
  * @return false if the ADC initialization failed
  */
 bool adc_init(adc_t *adc, uint8_t gpio_out);
+
+bool adc_new_unit(adc_t *adc, uint8_t gpio_out);
+
+bool adc_new_channel_cali(adc_t *adc, uint8_t gpio_out, adc_oneshot_unit_handle_t adc_handle);
 
 /**
  * @brief Deinitialize the ADC driver
