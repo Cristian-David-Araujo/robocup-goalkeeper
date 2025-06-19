@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interfaz UDP</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .tab-container {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background-color: #ddd;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            border-radius: 5px 5px 0 0;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background-color: #fff;
+            font-weight: bold;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 0 0 5px 5px;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="radio"] {
+            margin-right: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .radio-group {
+            margin-bottom: 15px;
+        }
+        .radio-option {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interfaz de Envío UDP</h1>
+    
+    <div class="tab-container">
+        <div class="tab active" onclick="openTab('tab1')">Configuración IP</div>
+        <div class="tab" onclick="openTab('tab2')">Linea Recta</div>
+    </div>
+    
+    <div id="tab1" class="tab-content active">
+        <div class="form-group">
+            <label for="ipAddress">Dirección IP:</label>
+            <input type="text" id="ipAddress" placeholder="Ejemplo: 192.168.1.1">
+        </div>
+        <button onclick="saveIpAndRedirect()">Continuar</button>
+    </div>
+    
+    <div id="tab2" class="tab-content">
+        <div class="radio-group">
+            <label>Seleccione una opción:</label>
+            <div class="radio-option">
+                <input type="radio" id="option1" name="dataOption" value=1 checked>
+                <label for="option1">Adelante</label>
+            </div>
+            <div class="radio-option">
+                <input type="radio" id="option2" name="dataOption" value=0>
+                <label for="option2">Atras</label>
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="vs">Velocidad de Dezplazamiento:</label>
+            <input type="number" id="vs" step="0.1">
+        </div>
+        
+        <div class="form-group">
+            <label for="dx">Distancia de desplazamiento (cm):</label>
+            <input type="number" id="dx" step="1">
+        </div>
+        
+        <div class="form-group">
+            <label for="angle">Ángulo (grados):</label>
+            <input type="number" id="angle" min="0" max="360" step="0.1">
+        </div>
+        
+        <button onclick="sendData()">Enviar Datos UDP</button>
+    </div>
+
+    <script>
+        function openTab(tabId) {
+            // Oculta todos los contenidos de pestañas
+            const tabContents = document.getElementsByClassName('tab-content');
+            for (let i = 0; i < tabContents.length; i++) {
+                tabContents[i].classList.remove('active');
+            }
+            
+            // Desactiva todas las pestañas
+            const tabs = document.getElementsByClassName('tab');
+            for (let i = 0; i < tabs.length; i++) {
+                tabs[i].classList.remove('active');
+            }
+            
+            // Activa la pestaña seleccionada
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+        
+        function saveIpAndRedirect() {
+            const ipAddress = document.getElementById('ipAddress').value;
+            
+            // Validación simple de IP
+            if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(ipAddress)) {
+                alert("Por favor ingrese una dirección IP válida");
+                return;
+            }
+            
+            // Guardar la IP (aquí podrías almacenarla en localStorage o enviarla al servidor)
+            localStorage.setItem('udpIpAddress', ipAddress);
+            
+            // Redirigir a la pestaña de datos
+            openTab('tab2');
+            
+            // Activar la pestaña de datos visualmente
+            const tabs = document.getElementsByClassName('tab');
+            tabs[0].classList.remove('active');
+            tabs[1].classList.add('active');
+        }
+        
+        function sendData() {
+            const ipAddress = localStorage.getItem('udpIpAddress');
+            if (!ipAddress) {
+                alert("Primero debe configurar la dirección IP");
+                openTab('tab1');
+                return;
+            }
+            
+            const selectedOption = document.querySelector('input[name="dataOption"]:checked').value;
+            const number1 = document.getElementById('vs').value;
+            const number2 = document.getElementById('dx').value;
+            const angle = document.getElementById('angle').value;
+            
+            if (!number1 || !number2 || !angle) {
+                alert("Por favor complete todos los campos");
+                return;
+            }
+            
+            const data = {
+                ip: ipAddress,
+                option: selectedOption,
+                numbers: [parseFloat(number1), parseFloat(number2)],
+                angle: parseFloat(angle)
+            };
+            
+            // Enviar datos al backend
+            fetch('/send_udp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert(`Datos enviados a ${ipAddress}\n` +
+                        `Opción: ${selectedOption}\n` +
+                        `Números: ${number1}, ${number2}\n` +
+                        `Ángulo: ${angle}°\n\n` +
+                        `${data.message}`);
+                } else {
+                    alert(`Error: ${data.message}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error al comunicarse con el servidor');
+            });
+        }
+    </script>
+</body>
+</html>
