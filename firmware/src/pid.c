@@ -170,6 +170,22 @@ int pid_update_parameters(pid_block_handle_t pid, const pid_parameter_t *params)
     return PID_OK;
 }
 
+int pid_update_set_point(pid_block_handle_t pid, float set_point)
+{
+    if (!pid) {
+        return PID_ERR_INVALID_ARG; // Invalid argument
+    }
+
+    pid->set_point = set_point;
+    pid->integral_err = 0; // Reset integral error when set point changes
+    pid->previous_err1 = 0; // Reset previous errors
+    pid->previous_err2 = 0;
+    pid->previous_output = 0; // Reset previous output
+    pid->previous_derivative_err = 0; // Reset previous derivative error
+
+    return PID_OK;
+}
+
 int pid_reset_block(pid_block_handle_t pid)
 {
     if (!pid) {

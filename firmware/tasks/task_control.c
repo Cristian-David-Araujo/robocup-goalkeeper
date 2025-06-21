@@ -63,7 +63,7 @@ void vTaskControl(void *pvParameters) {
 
         for (int i = 0; i < 3; i++) {
             // Set motor speed based on PID output
-            motor_set_speed(&motor[i], out_pid_motor[i]);
+            motor_set_speed(&motor[i], MOTOR_DIRECTION_FORWARD(i)*out_pid_motor[i]);
         }
 
         // Print the output every 20 ms

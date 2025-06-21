@@ -77,8 +77,8 @@ void vTaskReadSensors(void *pvParameters)
     float angle_deg[3] = {0.0f, 0.0f, 0.0f}; // Current angles in degrees for each encoder
     float omega_rad[3] = {0.0f, 0.0f, 0.0f}; // Angular velocities in rad/s for each encoder
 
-    uint32_t timestamp_us = 1000000; // 1 second in microseconds
-    int print_counter = 0;
+    // uint32_t timestamp_us = 1000000; // 1 second in microseconds
+    // int print_counter = 0;
 
     while (true) {
         //Take mutex to read the encoder angle
@@ -113,11 +113,11 @@ void vTaskReadSensors(void *pvParameters)
         
 
         // Print the result for debugging
-        if (++print_counter >= 10) {
-            printf("I,%" PRIu32 ",%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n", timestamp_us, angle_deg[0], angle_deg[1], angle_deg[2], SENSOR_ANGULAR_DIRECTION_FORWARD(0)*filtered_omega_rad[0], SENSOR_ANGULAR_DIRECTION_FORWARD(1)*filtered_omega_rad[1], SENSOR_ANGULAR_DIRECTION_FORWARD(2)*filtered_omega_rad[2]);
-            print_counter = 0;
-        }
-        timestamp_us += SENSOR_TASK_PERIOD_MS * 1000; // Increment timestamp by task period in microseconds
+        // if (++print_counter >= 10) {
+        //     printf("I,%" PRIu32 ",%.4f,%.4f,%.4f,%.4f,%.4f,%.4f\r\n", timestamp_us, angle_deg[0], angle_deg[1], angle_deg[2], SENSOR_ANGULAR_DIRECTION_FORWARD(0)*filtered_omega_rad[0], SENSOR_ANGULAR_DIRECTION_FORWARD(1)*filtered_omega_rad[1], SENSOR_ANGULAR_DIRECTION_FORWARD(2)*filtered_omega_rad[2]);
+        //     print_counter = 0;
+        // }
+        // timestamp_us += SENSOR_TASK_PERIOD_MS * 1000; // Increment timestamp by task period in microseconds
 
         // Wait for the next cycle
         xTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(SENSOR_TASK_PERIOD_MS));

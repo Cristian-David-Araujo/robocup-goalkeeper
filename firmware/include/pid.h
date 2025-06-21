@@ -83,6 +83,17 @@ int pid_del_control_block(pid_block_handle_t pid);
 int pid_update_parameters(pid_block_handle_t pid, const pid_parameter_t *params);
 
 /**
+ * @brief Update the set point of PID control block
+ *
+ * @param[in] pid PID control block handle, created by `pid_new_control_block()`
+ * @param[in] set_point New set point value
+ * @return
+ *      - PID_OK: Update set point successfully
+ *      - PID_ERR_INVALID_ARG: Update set point failed because of invalid argument
+ */
+int pid_update_set_point(pid_block_handle_t pid, float set_point);
+
+/**
  * @brief Input error and get PID control result
  *
  * @param[in] pid PID control block handle, created by `pid_new_control_block()`
