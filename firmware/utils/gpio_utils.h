@@ -18,7 +18,7 @@
  *  @brief Analog input pins for the three AS5600 encoders.
  *  @{
  */
-#define GPIO_ENCODER_0_IN_ANALOG 6   /**< Analog input pin for Encoder 0 M6*/ 
+#define GPIO_ENCODER_0_IN_ANALOG 4   /**< Analog input pin for Encoder 0 M6*/ 
 #define GPIO_ENCODER_0_I2C_SDA 4   /**< I2C SDA pin for Encoder 0 */
 #define GPIO_ENCODER_0_I2C_SCL 5   /**< I2C SCL pin for Encoder 0 */
 #define GPIO_ENCODER_0_I2C_MASTER_NUM 1   /**< I2C Master number for Encoder 0 */
@@ -30,8 +30,8 @@
  *  @brief PWM output pins for signal and reverse control of three motors.
  *  @{
  */
-#define GPIO_MOTOR_0_SIGNAL_OUT_PWM 20    /**< PWM signal output pin for Motor 0 */
-#define GPIO_MOTOR_0_REVERSE_OUT_PWM 21   /**< PWM reverse output pin for Motor 0 */
+#define GPIO_MOTOR_0_SIGNAL_OUT_PWM 7    /**< PWM signal output pin for Motor 0 */
+#define GPIO_MOTOR_0_REVERSE_OUT_PWM 8   /**< PWM reverse output pin for Motor 0 */
 #define GPIO_MOTOR_1_SIGNAL_OUT_PWM 15   /**< PWM signal output pin for Motor 1 */
 #define GPIO_MOTOR_1_REVERSE_OUT_PWM 3   /**< PWM reverse output pin for Motor 1 */
 #define GPIO_MOTOR_2_SIGNAL_OUT_PWM 16   /**< PWM signal output pin for Motor 2 */
