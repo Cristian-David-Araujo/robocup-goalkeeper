@@ -57,10 +57,14 @@ void vTaskMove(void* arg)
     TickType_t xLastWakeTime = xTaskGetTickCount();
 
     // Motor speed setpoints for forward and backward movement
-    const float setpoints[4][3] = {
-        {4.0f, 0.0f, -4.0f},   // Forward
+    const float setpoints[8][3] = {
+        {11.54f, 0.0f, -11.54f},   // Forward
         {0.0f, 0.0f, 0.0f},    // Stop
-        {-4.0f, 0.0f, 4.0f},   // Backward
+        {-11.54f, 0.0f, 11.54f},   // Backward
+        {0.0f, 0.0f, 0.0f},   // Stop
+        {12.88f, -9.43f, -3.45f},   // Left
+        {0.0f, 0.0f, 0.0f},  // Stop
+        {3.45f, 9.43f, -12.88f},   // Right
         {0.0f, 0.0f, 0.0f}    // Stop
     };
 
@@ -78,7 +82,7 @@ void vTaskMove(void* arg)
         }
 
         // Alternate between forward and backward setpoints
-        setpoint_index = (setpoint_index + 1) % 4; // Cycle through 0, 1, 2
+        setpoint_index = (setpoint_index + 1) % 8; // Cycle through 0, 1, 2, 3, 4, 5, 6, 7
 
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(3000)); ///< Delay for 1 second before switching direction
     }
@@ -103,10 +107,10 @@ void app_main(void)
     xTaskCreate(vTaskReadSensors, "Sensor Task", 4096, NULL, 6, NULL);
     // Start the control task with medium priority
     xTaskCreate(vTaskControl, "Control Task", 4096, NULL, 5, NULL);
-    // xTaskCreate(vTaskMove, "Move Task", 2048, NULL, 4, NULL); // Start the move task with lower priority
-    // Start the UART tunning the pid parameters task
-    xTaskCreate(vTaskUartHandler, "uart_handler", 4096, NULL, 10, NULL);
-    xTaskCreate(vTaskUartParser, "uart_parser", 4096, NULL, 10, &xHandleParserTask);
+    xTaskCreate(vTaskMove, "Move Task", 2048, NULL, 4, NULL); // Start the move task with lower priority
+    // // Start the UART tunning the pid parameters task
+    // xTaskCreate(vTaskUartHandler, "uart_handler", 4096, NULL, 10, NULL);
+    // xTaskCreate(vTaskUartParser, "uart_parser", 4096, NULL, 10, &xHandleParserTask);
 
     // motor_set_speed(&motor[0], MOTOR_DIRECTION_FORWARD(0) * 20.0f); // Set motor 0 speed to 20% in forward direction
     // motor_set_speed(&motor[1], MOTOR_DIRECTION_FORWARD(1) * 20.0f); // Set motor 1 speed to 20% in forward direction

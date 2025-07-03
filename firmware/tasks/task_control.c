@@ -116,10 +116,8 @@ void vTaskUartHandler(void *arg) {
     }
 }
 
-
-
 void vTaskUartParser(void *arg) {
-    float setpoint;
+    float kp, ki, kd, setpoint;
     char parsed[128];
 
     xHandleParserTask = xTaskGetCurrentTaskHandle();
@@ -135,17 +133,21 @@ void vTaskUartParser(void *arg) {
                 strncpy(parsed, start, end - start);
                 parsed[end - start] = '\0';
 
-                if (sscanf(parsed, "%f", &setpoint) == 1) {
+                if (sscanf(parsed, "%f %f %f %f", &kp, &ki, &kd, &setpoint) == 4) {
                     if (xSemaphoreTake(xPidMutex, portMAX_DELAY) == pdTRUE) {
+                        pid_param.kp = kp / 100.0f;
+                        pid_param.ki = ki / 100.0f;
+                        pid_param.kd = kd / 100.0f;
                         pid_param.set_point = setpoint;
                         
+                        // Update each PID controller with the new parameters
                         for (int i = 0; i < 3; i++) {
                             pid_update_parameters(pid[i], &pid_param);
                         }
 
                         xSemaphoreGive(xPidMutex);
 
-                        printf("Updated PID: setpoint=%.2f\n", setpoint);
+                        printf("Updated PID: kp=%.2f, ki=%.2f, kd=%.2f, setpoint=%.2f\n", kp, ki, kd, setpoint);
                     } else {
                         printf("PID mutex busy.\n");
                     }
@@ -156,7 +158,7 @@ void vTaskUartParser(void *arg) {
                 printf("Value too long or malformed.\n");
             }
         } else {
-            printf("Expected format: {\"default\":\"setpoint\"}\n");
+            printf("Expected format: {\"default\":\"kp ki kd setpoint\"}\n");
         }
     }
 }

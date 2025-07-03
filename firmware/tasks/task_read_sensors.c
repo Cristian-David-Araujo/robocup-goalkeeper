@@ -27,6 +27,50 @@ extern AS5600_t as5600[3]; ///< Array of AS5600 sensors
 /// Optional handle to manage task externally
 TaskHandle_t xTaskReadSensorsHandle = NULL;
 
+/// @brief Kalman filter state for 1D estimation
+/// This structure holds the estimated value, estimation error covariance, process noise, and measurement noise.
+typedef struct {
+    float x;  // estimated value
+    float P;  // estimation error covariance
+    float Q;  // process noise
+    float R;  // measurement noise
+} Kalman1D;
+
+/**
+ * @brief Initializes a Kalman filter for 1D estimation.
+ * 
+ * @param kf Pointer to the Kalman1D structure
+ * @param q Process noise covariance
+ * @param r Measurement noise covariance
+ */
+static inline void kalman_init(Kalman1D *kf, float q, float r) {
+    kf->x = 0.0f;
+    kf->P = 1.0f;
+    kf->Q = q;
+    kf->R = r;
+}
+
+/**
+ * @brief Updates the Kalman filter with a new measurement.
+ * 
+ * This function performs the prediction and update steps of the Kalman filter.
+ * It returns the updated estimated value.
+ * 
+ * @param kf Pointer to the Kalman1D structure
+ * @param measurement New measurement value
+ * @return Updated estimated value
+ */
+static inline float kalman_update(Kalman1D *kf, float measurement) {
+    kf->P += kf->Q;
+    float K = kf->P / (kf->P + kf->R);
+    kf->x += K * (measurement - kf->x);
+    kf->P *= (1.0f - K);
+    return kf->x;
+}
+
+
+
+
 /**
  * @brief Computes angular velocity in rad/s based on new angle and timestamp.
  * 
@@ -60,6 +104,11 @@ static inline float compute_angular_velocity(angular_velocity_t *sensor, float a
  * 
  * @param pvParameters Unused
  */
+/**
+ * @brief Task that reads encoder and computes angular velocity periodically.
+ * 
+ * @param pvParameters Unused
+ */
 void vTaskReadSensors(void *pvParameters)
 {
     TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -72,10 +121,15 @@ void vTaskReadSensors(void *pvParameters)
         encoder_state[i].last_time_us = now_us;
     }
 
-    float beta = exp(-2 * M_PI * SENSOR_CUTOFF_FREQUENCY_OMEGA_HZ / SENSOR_TASK_SAMPLE_RATE_HZ);  // 10Hz cutoff frequency
+    // float beta = exp(-2 * M_PI * SENSOR_CUTOFF_FREQUENCY_OMEGA_HZ / SENSOR_TASK_SAMPLE_RATE_HZ);
     float filtered_omega_rad[3] = {0.0f, 0.0f, 0.0f}; // Filtered angular velocities for each encoder
     float angle_deg[3] = {0.0f, 0.0f, 0.0f}; // Current angles in degrees for each encoder
     float omega_rad[3] = {0.0f, 0.0f, 0.0f}; // Angular velocities in rad/s for each encoder
+    // Kalman filters for each encoder
+    Kalman1D kalman_filters[3];
+    for (int i = 0; i < 3; i++) {
+        kalman_init(&kalman_filters[i], SENSOR_KALMAN_Q, SENSOR_KALMAN_R); // Initialize Kalman filter for each encoder
+    }
 
     // uint32_t timestamp_us = 1000000; // 1 second in microseconds
     // int print_counter = 0;
@@ -91,14 +145,15 @@ void vTaskReadSensors(void *pvParameters)
             xSemaphoreGive(xADCMutex);
         }
         // angle_deg = AS5600_ADC_GetAngle(&as5600_0);
-        now_us  = esp_timer_get_time();
+        now_us  = esp_timer_get_time(); ///< Get current time in microseconds
 
-        // Compute angular velocity for each encoder
+        // Compute angular velocity and apply filter
         for (int i = 0; i < 3; i++) {
             // Compute angular velocity in rad/s
             omega_rad[i] = compute_angular_velocity(&encoder_state[i], angle_deg[i], now_us);
             // Apply low-pass filter to smooth the angle Vn = beta * Vn-1 + (1 - beta) * Vn
-            filtered_omega_rad[i] = beta * filtered_omega_rad[i] + (1.0f - beta) * omega_rad[i];
+            // filtered_omega_rad[i] = beta * filtered_omega_rad[i] + (1.0f - beta) * omega_rad[i];
+            filtered_omega_rad[i] = kalman_update(&kalman_filters[i], omega_rad[i]);
         }
         
 
