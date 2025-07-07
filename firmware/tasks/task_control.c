@@ -4,7 +4,7 @@
 #include "driver/uart.h"
 
 #include "esp_timer.h"
-#include "types.h"
+#include "types_utils.h"
 #include "motor.h"
 #include "pid.h"
 #include "config_utils.h" ///< Configuration utilities

@@ -8,7 +8,7 @@
 #include "init.h"
 #include "motor.h"
 #include "as5600.h"
-#include "types.h"
+#include "types_utils.h"
 
 // Forward declaration for UART initialization if not included by a header
 void uart_init_task(void);
@@ -19,6 +19,7 @@ void vTaskControl(void *pvParameters);
 void vTaskUart(void* arg);
 void vTaskUartHandler(void *arg);
 void vTaskUartParser(void *arg);
+void vTaskInverseKinematics(void *pvParameters);
 
 motor_brushless_t motor[3]; ///< Array of brushless motors
 AS5600_t as5600[3]; ///< Array of AS5600 sensors
@@ -37,7 +38,11 @@ pid_parameter_t pid_param = {
         .beta = PID_MOTOR_BETA // Set beta filter coefficient for derivative term
     };
 
-RawSensorData sensor_data = {0};  // Initialize with zeros
+RawSensorData sensor_data = {0};  //< Initialize with zeros
+Velocity robot_command;           //< {vx, vy, wz}
+WheelSpeeds wheel_targets;  //< φ̇_1, φ̇_2, φ̇_3
+
+SemaphoreHandle_t xCmdMutex;
 SemaphoreHandle_t xSensorDataMutex = NULL;
 SemaphoreHandle_t xPidMutex = NULL; // Mutex for PID control
 SemaphoreHandle_t xADCMutex = NULL; // Mutex for ADC operations
@@ -56,33 +61,33 @@ void vTaskMove(void* arg)
 {
     TickType_t xLastWakeTime = xTaskGetTickCount();
 
+    /// Comand structure to robot
+
     // Motor speed setpoints for forward and backward movement
-    const float setpoints[8][3] = {
-        {11.54f, 0.0f, -11.54f},   // Forward
+    const float commands[8][3] = {
+        {0.0f, 10.0f, 0.0f},   // Forward
         {0.0f, 0.0f, 0.0f},    // Stop
-        {-11.54f, 0.0f, 11.54f},   // Backward
+        {0.0f, -10.0f, 0.0f},   // Backward
         {0.0f, 0.0f, 0.0f},   // Stop
-        {12.88f, -9.43f, -3.45f},   // Left
+        {-10.0f, 0.0f, 0.0f},   // Left
         {0.0f, 0.0f, 0.0f},  // Stop
-        {3.45f, 9.43f, -12.88f},   // Right
+        {10.0f, 0.0f, 0.0f},   // Right
         {0.0f, 0.0f, 0.0f}    // Stop
     };
 
-    int setpoint_index = 0;
+    int index = 0;
 
     while (1) {
-        // Acquire the PID mutex before updating setpoints
-        if (xSemaphoreTake(xPidMutex, portMAX_DELAY) == pdTRUE) {
-            for (int i = 0; i < 3; i++) {
-                if (pid[i] != NULL) {
-                    pid_update_set_point(pid[i], setpoints[setpoint_index][i]);
-                }
-            }
-            xSemaphoreGive(xPidMutex);
+        // Set the robot command based on the current setpoint
+        if (xSemaphoreTake(xCmdMutex, portMAX_DELAY) == pdTRUE) {
+            robot_command.vx = commands[index][0];
+            robot_command.vy = commands[index][1];
+            robot_command.wz = commands[index][2];
+            xSemaphoreGive(xCmdMutex);
         }
 
         // Alternate between forward and backward setpoints
-        setpoint_index = (setpoint_index + 1) % 8; // Cycle through 0, 1, 2, 3, 4, 5, 6, 7
+        index = (index + 1) % 8; // Cycle through 0, 1, 2, 3, 4, 5, 6, 7
 
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(3000)); ///< Delay for 1 second before switching direction
     }
@@ -93,7 +98,7 @@ void app_main(void)
     init_sensors(); // Initialize sensors
     init_motors();  // Initialize motors
     init_pid(); // Initialize PID controller
-    uart_init_task(); // Initialize UART
+    // uart_init_task(); // Initialize UART
     // motor_calibration3(&motor_0, &motor_1, &motor_2); // Calibrate all motors
     vTaskDelay(pdMS_TO_TICKS(3000)); // Delay to allow sensors to stabilize
 
@@ -101,12 +106,15 @@ void app_main(void)
     xSensorDataMutex = xSemaphoreCreateMutex();
     xPidMutex = xSemaphoreCreateMutex();
     xADCMutex = xSemaphoreCreateMutex(); // Create mutex for ADC operations
+    xCmdMutex = xSemaphoreCreateMutex(); // Create mutex for command data
 
 
     // Start the sensor reading task with higher priority
     xTaskCreate(vTaskReadSensors, "Sensor Task", 4096, NULL, 6, NULL);
     // Start the control task with medium priority
     xTaskCreate(vTaskControl, "Control Task", 4096, NULL, 5, NULL);
+    // Start the inverse kinematics task with higher priority
+    xTaskCreate(vTaskInverseKinematics, "IK", 1024, NULL, 3, NULL);
     xTaskCreate(vTaskMove, "Move Task", 2048, NULL, 4, NULL); // Start the move task with lower priority
     // // Start the UART tunning the pid parameters task
     // xTaskCreate(vTaskUartHandler, "uart_handler", 4096, NULL, 10, NULL);

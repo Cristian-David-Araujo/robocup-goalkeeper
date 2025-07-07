@@ -6,7 +6,7 @@
 #include "bno055.h"      ///< IMU driver
 #include "as5600.h"      ///< AS5600 encoder driver
 #include "config_utils.h" ///< Configuration utilities
-#include "types.h"
+#include "types_utils.h"
 
 #include <stdint.h>
 #include <math.h>
