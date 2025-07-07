@@ -21,8 +21,8 @@
 
 /* PID MOTOR configuration */
 #define PID_MOTOR_KP 0.01f                // Proportional gain
-#define PID_MOTOR_KI 0.003f                // Integral gain
-#define PID_MOTOR_KD 0.05f               // Derivative gain
+#define PID_MOTOR_KI 0.005f                // Integral gain
+#define PID_MOTOR_KD 0.0f               // Derivative gain
 #define PID_MOTOR_BETA 0.0f              // Beta filter coefficient for derivative term
 #define PID_MOTOR_MAX_OUTPUT 80.0f      // Maximum output of PID controller
 #define PID_MOTOR_MIN_OUTPUT -80.0f     // Minimum output of PID controller
@@ -48,7 +48,7 @@
 #define CONTROL_TASK_PERIOD_MS 2 // Control loop task period in milliseconds
 #define CONTROL_TASK_SAMPLE_RATE_HZ (1000.0f/(CONTROL_TASK_PERIOD_MS)) // Control loop sample rate in Hz
 
-#define KINEMATICS_TASK_PERIOD_MS 2 // Inverse kinematics task period in milliseconds
+#define KINEMATICS_TASK_PERIOD_MS 10 // Inverse kinematics task period in milliseconds
 
 
 #endif // CONFIG_UTILS_H

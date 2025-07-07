@@ -65,13 +65,13 @@ void vTaskMove(void* arg)
 
     // Motor speed setpoints for forward and backward movement
     const float commands[8][3] = {
-        {0.0f, 10.0f, 0.0f},   // Forward
+        {0.0f, 1.0f, 0.0f},   // Forward
         {0.0f, 0.0f, 0.0f},    // Stop
-        {0.0f, -10.0f, 0.0f},   // Backward
+        {0.0f, -1.0f, 0.0f},   // Backward
         {0.0f, 0.0f, 0.0f},   // Stop
-        {-10.0f, 0.0f, 0.0f},   // Left
+        {-1.0f, 0.0f, 0.0f},   // Left
         {0.0f, 0.0f, 0.0f},  // Stop
-        {10.0f, 0.0f, 0.0f},   // Right
+        {1.0f, 0.0f, 0.0f},   // Right
         {0.0f, 0.0f, 0.0f}    // Stop
     };
 
@@ -88,6 +88,9 @@ void vTaskMove(void* arg)
 
         // Alternate between forward and backward setpoints
         index = (index + 1) % 8; // Cycle through 0, 1, 2, 3, 4, 5, 6, 7
+
+        // Print the current command for debugging
+        printf("Moving: vx=%.2f, vy=%.2f, wz=%.2f\n", robot_command.vx, robot_command.vy, robot_command.wz);
 
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(3000)); ///< Delay for 1 second before switching direction
     }
@@ -112,9 +115,9 @@ void app_main(void)
     // Start the sensor reading task with higher priority
     xTaskCreate(vTaskReadSensors, "Sensor Task", 4096, NULL, 6, NULL);
     // Start the control task with medium priority
-    xTaskCreate(vTaskControl, "Control Task", 4096, NULL, 5, NULL);
+    xTaskCreate(vTaskControl, "Control Task", 4096, NULL, 3, NULL);
     // Start the inverse kinematics task with higher priority
-    xTaskCreate(vTaskInverseKinematics, "IK", 1024, NULL, 3, NULL);
+    xTaskCreate(vTaskInverseKinematics, "IK", 4096, NULL, 5, NULL);
     xTaskCreate(vTaskMove, "Move Task", 2048, NULL, 4, NULL); // Start the move task with lower priority
     // // Start the UART tunning the pid parameters task
     // xTaskCreate(vTaskUartHandler, "uart_handler", 4096, NULL, 10, NULL);
