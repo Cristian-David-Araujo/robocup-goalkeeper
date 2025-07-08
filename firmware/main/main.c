@@ -34,7 +34,7 @@ pid_parameter_t pid_param = {
         .max_output = PID_MOTOR_MAX_OUTPUT, // Set maximum output for PID controller
         .min_output = PID_MOTOR_MIN_OUTPUT, // Set minimum output for PID controller
         .set_point = 0.0f,
-        .cal_type = PID_CAL_TYPE_INCREMENTAL,
+        .cal_type = PID_CAL_TYPE_POSITIONAL,
         .beta = PID_MOTOR_BETA // Set beta filter coefficient for derivative term
     };
 
@@ -49,6 +49,11 @@ SemaphoreHandle_t xADCMutex = NULL; // Mutex for ADC operations
 
 TaskHandle_t xHandleParserTask;
 
+#define CIRCULAR_RADIUS 1.0f
+#define OMEGA_CIRC 0.5f                // Velocidad angular (rad/s)
+#define DT_SECONDS 0.02f               // Periodo de actualización (segundos)
+#define TASK_PERIOD_MS ((int)(DT_SECONDS * 1000))
+
 /**
  * @brief Task that moves the motors forward and backward periodically.
  * 
@@ -60,39 +65,35 @@ TaskHandle_t xHandleParserTask;
 void vTaskMove(void* arg)
 {
     TickType_t xLastWakeTime = xTaskGetTickCount();
-
-    /// Comand structure to robot
-
-    // Motor speed setpoints for forward and backward movement
-    const float commands[8][3] = {
-        {0.0f, 1.0f, 0.0f},   // Forward
-        {0.0f, 0.0f, 0.0f},    // Stop
-        {0.0f, -1.0f, 0.0f},   // Backward
-        {0.0f, 0.0f, 0.0f},   // Stop
-        {-1.0f, 0.0f, 0.0f},   // Left
-        {0.0f, 0.0f, 0.0f},  // Stop
-        {1.0f, 0.0f, 0.0f},   // Right
-        {0.0f, 0.0f, 0.0f}    // Stop
-    };
-
-    int index = 0;
+    float t = 0.0f;
+    float prev_angle = 0.0f;
 
     while (1) {
-        // Set the robot command based on the current setpoint
-        if (xSemaphoreTake(xCmdMutex, portMAX_DELAY) == pdTRUE) {
-            robot_command.vx = commands[index][0];
-            robot_command.vy = commands[index][1];
-            robot_command.wz = commands[index][2];
+        // Calculate the command velocities based on a circular trajectory
+        float vx_cmd = -CIRCULAR_RADIUS * OMEGA_CIRC * sinf(OMEGA_CIRC * t);
+        float vy_cmd =  CIRCULAR_RADIUS * OMEGA_CIRC * cosf(OMEGA_CIRC * t);
+        float angle = atan2f(vy_cmd, vx_cmd);
+        float omega_cmd = (angle - prev_angle) / DT_SECONDS;
+
+        if (omega_cmd > M_PI / DT_SECONDS) omega_cmd -= 2 * M_PI / DT_SECONDS;
+        if (omega_cmd < -M_PI / DT_SECONDS) omega_cmd += 2 * M_PI / DT_SECONDS;
+
+        prev_angle = angle;
+
+        // Write the command to the shared robot_command structure
+        if (xCmdMutex && xSemaphoreTake(xCmdMutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+            robot_command.vx = vx_cmd;
+            robot_command.vy = vy_cmd;
+            robot_command.wz = omega_cmd;
             xSemaphoreGive(xCmdMutex);
         }
 
-        // Alternate between forward and backward setpoints
-        index = (index + 1) % 8; // Cycle through 0, 1, 2, 3, 4, 5, 6, 7
+        // Log the command for debugging
+        printf("t=%.2f  cmd: vx=%.3f, vy=%.3f, wz=%.3f \n", t, vx_cmd, vy_cmd, omega_cmd);
 
-        // Print the current command for debugging
-        printf("Moving: vx=%.2f, vy=%.2f, wz=%.2f\n", robot_command.vx, robot_command.vy, robot_command.wz);
-
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(3000)); ///< Delay for 1 second before switching direction
+        // Wait for the next cycle
+        t += DT_SECONDS;
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(TASK_PERIOD_MS));
     }
 }
 

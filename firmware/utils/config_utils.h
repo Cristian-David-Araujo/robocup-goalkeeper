@@ -20,8 +20,8 @@
 
 
 /* PID MOTOR configuration */
-#define PID_MOTOR_KP 0.01f                // Proportional gain
-#define PID_MOTOR_KI 0.005f                // Integral gain
+#define PID_MOTOR_KP 0.1f                // Proportional gain
+#define PID_MOTOR_KI 0.006f                // Integral gain
 #define PID_MOTOR_KD 0.0f               // Derivative gain
 #define PID_MOTOR_BETA 0.0f              // Beta filter coefficient for derivative term
 #define PID_MOTOR_MAX_OUTPUT 80.0f      // Maximum output of PID controller

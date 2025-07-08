@@ -23,7 +23,7 @@ TaskHandle_t xTaskKinematicsHandle = NULL;
 
 void vTaskInverseKinematics(void *pvParameters) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
-    // uint32_t timestamp_us = 0;
+    uint32_t timestamp_us = 0;
     WheelSpeeds targets = {0}; // Initialize wheel speeds to zero
     Velocity cmd = {0}; // Initialize command to zero
     
@@ -37,7 +37,7 @@ void vTaskInverseKinematics(void *pvParameters) {
         // Compute wheel speeds (inverse kinematics)
         compute_inverse_kinematics(cmd, &targets);  // implemented below
 
-        // Save to global (or send to motor controllers)
+        // Save to global
         if (xSemaphoreTake(xCmdMutex, portMAX_DELAY) == pdTRUE) {
             wheel_targets = targets;
             xSemaphoreGive(xCmdMutex);
