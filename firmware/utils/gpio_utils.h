@@ -42,8 +42,8 @@
  *  @brief UART TX and RX pins for IMU communication.
  *  @{
  */
-#define GPIO_IMU_UART_TX 17   /**< UART TX pin for IMU BNO055 */
-#define GPIO_IMU_UART_RX 18   /**< UART RX pin for IMU BNO055 */
+#define GPIO_IMU_I2C_SDA 17   /**< UART TX pin for IMU BNO055 */
+#define GPIO_IMU_I2C_SCL 18   /**< UART RX pin for IMU BNO055 */
 /** @} */
 
 

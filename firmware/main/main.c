@@ -8,6 +8,7 @@
 #include "init.h"
 #include "motor.h"
 #include "as5600.h"
+#include "bno055.h"
 #include "types_utils.h"
 
 // Forward declaration for UART initialization if not included by a header
@@ -23,6 +24,7 @@ void vTaskInverseKinematics(void *pvParameters);
 
 motor_brushless_t motor[3]; ///< Array of brushless motors
 AS5600_t as5600[3]; ///< Array of AS5600 sensors
+BNO055_t bno055; ///< BNO055 sensor structure
 adc_oneshot_unit_handle_t shared_adc_handle;
 
 
@@ -49,7 +51,7 @@ SemaphoreHandle_t xADCMutex = NULL; // Mutex for ADC operations
 
 TaskHandle_t xHandleParserTask;
 
-#define CIRCULAR_RADIUS 1.0f
+#define CIRCULAR_RADIUS 0.5f
 #define OMEGA_CIRC 0.5f                // Velocidad angular (rad/s)
 #define DT_SECONDS 0.02f               // Periodo de actualización (segundos)
 #define TASK_PERIOD_MS ((int)(DT_SECONDS * 1000))
@@ -99,8 +101,8 @@ void vTaskMove(void* arg)
 
 void app_main(void)
 {
-    init_sensors(); // Initialize sensors
     init_motors();  // Initialize motors
+    init_sensors(); // Initialize sensors
     init_pid(); // Initialize PID controller
     // uart_init_task(); // Initialize UART
     // motor_calibration3(&motor_0, &motor_1, &motor_2); // Calibrate all motors

@@ -50,5 +50,5 @@
 
 #define KINEMATICS_TASK_PERIOD_MS 10 // Inverse kinematics task period in milliseconds
 
-
+#define BNO055_I2C_MASTER_NUM 0
 #endif // CONFIG_UTILS_H

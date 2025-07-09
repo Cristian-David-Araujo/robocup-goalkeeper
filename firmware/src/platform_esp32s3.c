@@ -210,19 +210,32 @@ void i2c_deinit(i2c_t *i2c)
     i2c_del_master_bus(i2c->bus_handle);
 }
 
-void i2c_read_reg(i2c_t *i2c, uint8_t reg, uint8_t *data, size_t len)
+bool i2c_read_reg(i2c_t *i2c, uint8_t reg, uint8_t *data, size_t len)
 {
+    esp_err_t ret = ESP_OK;
+
     uint8_t write_buffer[] = {reg};
-    i2c_master_transmit_receive(i2c->dev_handle, write_buffer, 1, (uint8_t *)data, len, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
+    ESP_GOTO_ON_ERROR(i2c_master_transmit_receive(i2c->dev_handle, write_buffer, 1, (uint8_t *)data, len, I2C_TIMEOUT_MS / portTICK_PERIOD_MS), err, TAG_I2C, "i2c read reg failed");
+
+    return true;
+err:
+    return false;
 }
 
-void i2c_write_reg(i2c_t *i2c, uint8_t reg, uint8_t *data, size_t len)
+bool i2c_write_reg(i2c_t *i2c, uint8_t reg, uint8_t *data, size_t len)
 {
+    esp_err_t ret = ESP_OK;
+
     uint8_t write_buffer[len + 1];
     write_buffer[0] = reg;
     memcpy(&write_buffer[1], data, len);
-    i2c_master_transmit(i2c->dev_handle, write_buffer, len + 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS);
+    ESP_GOTO_ON_ERROR(i2c_master_transmit(i2c->dev_handle, write_buffer, len + 1, I2C_TIMEOUT_MS / portTICK_PERIOD_MS), err, TAG_I2C, "i2c write reg failed");
+
+    return true;
+err:
+    return false;
 }
+
 
 void i2c_write(i2c_t *i2c, uint8_t *data, size_t len)
 {

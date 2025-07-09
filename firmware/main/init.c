@@ -60,10 +60,14 @@ int init_sensors(void)
 
 
     // Initialize BNO055 sensor
-    // status = BNO055_Init(&bno055, GPIO_IMU_UART_TX, GPIO_IMU_UART_RX);
-    // if (status != INIT_SUCCESS) {
-    //     return INIT_ERROR_BNO055; // Return error if BNO055 initialization fails
+    // status = BNO055_Init(&bno055, GPIO_IMU_I2C_SDA, GPIO_IMU_I2C_SCL, BNO055_I2C_MASTER_NUM);
+    // while (status != BNO055_SUCCESS) {
+    //     printf("Error: Failed to initialize BNO055 sensor\n");
+    //     BNO055_Reset(&bno055);
+    //     vTaskDelay(pdMS_TO_TICKS(1000)); // Wait 1 second
+    //     status = BNO055_Init(&bno055, GPIO_IMU_I2C_SDA, GPIO_IMU_I2C_SCL, BNO055_I2C_MASTER_NUM);
     // }
+
 
     
     return status; // Return success if all sensors are initialized successfully

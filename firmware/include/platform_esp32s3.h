@@ -166,8 +166,10 @@ void i2c_deinit(i2c_t *i2c);
  * @param reg 
  * @param data 
  * @param len 
+ * @return true  if the read operation was successful
+ * @return false  if the read operation failed
  */
-void i2c_read_reg(i2c_t *i2c, uint8_t reg, uint8_t *data, size_t len);
+bool i2c_read_reg(i2c_t *i2c, uint8_t reg, uint8_t *data, size_t len);
 
 /**
  * @brief Given a register address, write the data to the register.
@@ -176,8 +178,10 @@ void i2c_read_reg(i2c_t *i2c, uint8_t reg, uint8_t *data, size_t len);
  * @param reg 
  * @param data 
  * @param len 
+ * @return true if the write operation was successful
+ * @return false if the write operation failed
  */
-void i2c_write_reg(i2c_t *i2c, uint8_t reg, uint8_t *data, size_t len);
+bool i2c_write_reg(i2c_t *i2c, uint8_t reg, uint8_t *data, size_t len);
 
 /**
  * @brief Write data to the I2C bus
