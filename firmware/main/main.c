@@ -22,6 +22,7 @@ void vTaskUartHandler(void *arg);
 void vTaskUartParser(void *arg);
 void vTaskInverseKinematics(void *pvParameters);
 
+
 motor_brushless_t motor[3]; ///< Array of brushless motors
 AS5600_t as5600[3]; ///< Array of AS5600 sensors
 BNO055_t bno055; ///< BNO055 sensor structure
@@ -42,12 +43,14 @@ pid_parameter_t pid_param = {
 
 RawSensorData sensor_data = {0};  //< Initialize with zeros
 Velocity robot_command;           //< {vx, vy, wz}
+Velocity robot_estimated;         //< {vx, vy, wz} - Estimated velocities from sensors
 WheelSpeeds wheel_targets;  //< φ̇_1, φ̇_2, φ̇_3
 
 SemaphoreHandle_t xCmdMutex;
 SemaphoreHandle_t xSensorDataMutex = NULL;
 SemaphoreHandle_t xPidMutex = NULL; // Mutex for PID control
 SemaphoreHandle_t xADCMutex = NULL; // Mutex for ADC operations
+SemaphoreHandle_t xEstimatedDataMutex = NULL; // Mutex for estimated data
 
 TaskHandle_t xHandleParserTask;
 
@@ -69,6 +72,7 @@ void vTaskMove(void* arg)
     TickType_t xLastWakeTime = xTaskGetTickCount();
     float t = 0.0f;
     float prev_angle = 0.0f;
+    Velocity speed_estimated = {0};
 
     while (1) {
         // Calculate the command velocities based on a circular trajectory
@@ -90,8 +94,18 @@ void vTaskMove(void* arg)
             xSemaphoreGive(xCmdMutex);
         }
 
-        // Log the command for debugging
-        printf("t=%.2f  cmd: vx=%.3f, vy=%.3f, wz=%.3f \n", t, vx_cmd, vy_cmd, omega_cmd);
+        // Read the current robot state for debugging
+        if (xEstimatedDataMutex && xSemaphoreTake(xEstimatedDataMutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+            speed_estimated = robot_estimated;
+            xSemaphoreGive(xEstimatedDataMutex);
+        }
+
+        // Log the command for debugging every 1s
+        if ((int)(t * 1000) % 1000 == 0) { // Log every second
+            printf("Move Task, t=%.2f, vx=%.2f, vy=%.2f, wz=%.2f\n", t, vx_cmd, vy_cmd, omega_cmd);
+            printf("Estimated Speed: vx=%.2f, vy=%.2f, wz=%.2f\n", 
+                   speed_estimated.vx, speed_estimated.vy, speed_estimated.wz);
+        }
 
         // Wait for the next cycle
         t += DT_SECONDS;
@@ -113,6 +127,7 @@ void app_main(void)
     xPidMutex = xSemaphoreCreateMutex();
     xADCMutex = xSemaphoreCreateMutex(); // Create mutex for ADC operations
     xCmdMutex = xSemaphoreCreateMutex(); // Create mutex for command data
+    xEstimatedDataMutex = xSemaphoreCreateMutex(); // Create mutex for estimated data
 
 
     // Start the sensor reading task with higher priority

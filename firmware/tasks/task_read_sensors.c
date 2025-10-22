@@ -7,6 +7,7 @@
 #include "as5600.h"      ///< AS5600 encoder driver
 #include "config_utils.h" ///< Configuration utilities
 #include "types_utils.h"
+#include "kinematics.h"  ///< Inverse kinematics functions
 
 #include <stdint.h>
 #include <math.h>
@@ -21,9 +22,14 @@ typedef struct {
 extern RawSensorData sensor_data;
 extern SemaphoreHandle_t xSensorDataMutex;
 extern SemaphoreHandle_t xADCMutex; // Mutex for ADC operations
+extern SemaphoreHandle_t xEstimatedDataMutex; // Mutex for estimated data
 
 // External AS5600 sensor instance
 extern AS5600_t as5600[3]; ///< Array of AS5600 sensors
+
+// External robot velocity estimate
+extern Velocity robot_estimated;         ///< Estimated velocities from sensors
+
 /// Optional handle to manage task externally
 TaskHandle_t xTaskReadSensorsHandle = NULL;
 
@@ -125,6 +131,11 @@ void vTaskReadSensors(void *pvParameters)
     float filtered_omega_rad[3] = {0.0f, 0.0f, 0.0f}; // Filtered angular velocities for each encoder
     float angle_deg[3] = {0.0f, 0.0f, 0.0f}; // Current angles in degrees for each encoder
     float omega_rad[3] = {0.0f, 0.0f, 0.0f}; // Angular velocities in rad/s for each encoder
+
+    WheelSpeeds wheel_speeds_stimated = {0}; // Wheel speeds estimated from sensors
+    Velocity speed_estimated = {0}; // Estimated robot speed from sensors
+
+
     // Kalman filters for each encoder
     Kalman1D kalman_filters[3];
     for (int i = 0; i < 3; i++) {
@@ -153,7 +164,22 @@ void vTaskReadSensors(void *pvParameters)
             omega_rad[i] = compute_angular_velocity(&encoder_state[i], angle_deg[i], now_us);
             // Apply low-pass filter to smooth the angle Vn = beta * Vn-1 + (1 - beta) * Vn
             // filtered_omega_rad[i] = beta * filtered_omega_rad[i] + (1.0f - beta) * omega_rad[i];
-            filtered_omega_rad[i] = kalman_update(&kalman_filters[i], omega_rad[i]);
+            filtered_omega_rad[i] = SENSOR_ANGULAR_DIRECTION_FORWARD(i) * kalman_update(&kalman_filters[i], omega_rad[i]);
+        }
+
+        // Calculate the estimated velocities based on the angular velocities with forward kinematics
+        wheel_speeds_stimated.phi_dot[0] = filtered_omega_rad[0]; // φ̇_1
+        wheel_speeds_stimated.phi_dot[1] = filtered_omega_rad[2]; // φ̇_2
+        wheel_speeds_stimated.phi_dot[2] = filtered_omega_rad[1]; // φ̇_3
+        compute_forward_kinematics(wheel_speeds_stimated, &speed_estimated);
+        
+
+        // Update the robot estimated velocities
+        if (xSemaphoreTake(xEstimatedDataMutex, portMAX_DELAY) == pdTRUE) {
+            robot_estimated.vx = speed_estimated.vx;
+            robot_estimated.vy = speed_estimated.vy;
+            robot_estimated.wz = speed_estimated.wz;
+            xSemaphoreGive(xEstimatedDataMutex);
         }
         
 
@@ -161,7 +187,7 @@ void vTaskReadSensors(void *pvParameters)
         if (xSemaphoreTake(xSensorDataMutex, portMAX_DELAY) == pdTRUE) {
             for (int i = 0; i < 3; i++) {
                 sensor_data.encoders[i].angle_deg = angle_deg[i];
-                sensor_data.encoders[i].omega_rad = SENSOR_ANGULAR_DIRECTION_FORWARD(i) * filtered_omega_rad[i]; // Forward direction
+                sensor_data.encoders[i].omega_rad = filtered_omega_rad[i]; // Forward direction
             }
             xSemaphoreGive(xSensorDataMutex);
         }
