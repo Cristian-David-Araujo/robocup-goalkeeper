@@ -1,76 +1,116 @@
+/**
+ * @file init.h
+ * @brief Hardware initialization interface for RoboCup Goalkeeper firmware
+ * 
+ * This module handles initialization of all hardware peripherals including:
+ * - AS5600 magnetic encoders (3 units)
+ * - BNO055 IMU sensor
+ * - Brushless motor controllers (3 units)
+ * - PID controllers (3 units)
+ * 
+ * All identifiers follow snake_case naming convention.
+ * 
+ * @note Call init functions in order: sensors -> motors -> pid
+ */
+
 #ifndef INIT_H
 #define INIT_H
 
-/* ESP LOGS*/
 #include "esp_log.h"
-
-
-
-/* Header file for sensor initialization */
 #include "as5600.h"
 #include "bno055.h"
 #include "platform_esp32s3.h"
 #include "motor.h"
 #include "pid.h"
-
-
 #include "gpio_utils.h"
 #include "config_utils.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-// Define macros for error handling
-#define INIT_SUCCESS 0
-#define INIT_ERROR_AS5600 1  ///< Error code for AS5600 initialization failure
-#define INIT_ERROR_BNO055 2 ///< Error code for BNO055 initialization failure
-#define INIT_ERROR_PID 3 ///< Error code for PID initialization failure
-#define INIT_ERROR_MOTOR 4 ///< Error code for motor initialization failure
+// =============================================================================
+// ERROR CODES
+// =============================================================================
 
+#define INIT_SUCCESS 0              ///< Initialization successful
+#define INIT_ERROR_AS5600 1         ///< AS5600 encoder initialization failed
+#define INIT_ERROR_BNO055 2         ///< BNO055 IMU initialization failed
+#define INIT_ERROR_PID 3            ///< PID controller initialization failed
+#define INIT_ERROR_MOTOR 4          ///< Motor initialization failed
 
+// =============================================================================
+// EXTERNAL HARDWARE INSTANCE DECLARATIONS
+// =============================================================================
 
-extern AS5600_t as5600[3]; ///< Array of AS5600 sensors
+/// @brief Array of AS5600 encoder instances (one per motor)
+extern AS5600_t g_as5600[3];
 
-extern BNO055_t bno055; ///< BNO055 sensor structure
+/// @brief BNO055 IMU sensor instance
+extern BNO055_t g_bno055;
 
-extern motor_brushless_t motor[3]; ///< Array of brushless motors
+/// @brief Array of brushless motor instances
+extern motor_brushless_t g_motor[3];
 
-extern pid_block_handle_t pid[3]; ///< Array of PID controllers for each motor
-extern pid_parameter_t pid_param; ///< PID controller parameters
+/// @brief Array of PID controller handles
+extern pid_block_handle_t g_pid[3];
 
-extern adc_oneshot_unit_handle_t shared_adc_handle; ///< Shared ADC handle for ADC operations
+/// @brief PID controller parameters (shared configuration)
+extern pid_parameter_t g_pid_param;
 
+/// @brief Shared ADC handle for encoder analog reading
+extern adc_oneshot_unit_handle_t g_shared_adc_handle;
+
+// =============================================================================
+// INITIALIZATION FUNCTIONS
+// =============================================================================
 
 /**
- * @brief Initialize the sensors
- * This function initializes the AS5600 and BNO055 sensors, sets up the UART for communication,
- * and configures the GPIO pins for the sensors.
- * @param AS5600_t *as5600 Pointer to the AS5600 sensor structure
- * @param BNO055_t *bno055 Pointer to the BNO055 sensor structure
- * @return int
- *         - INIT_SUCCESS if initialization is successful
- *        - INIT_ERROR_AS5600 if AS5600 initialization fails
- *        - INIT_ERROR_BNO055 if BNO055 initialization fails
+ * @brief Initialize all sensor peripherals
+ *
+ * Configures and initializes:
+ * - AS5600 magnetic encoders (analog mode with shared ADC)
+ * - BNO055 IMU (I2C interface) - currently disabled in implementation
+ *
+ * @return int Status code
+ *         - INIT_SUCCESS on successful initialization
+ *         - INIT_ERROR_AS5600 if encoder setup fails
+ *         - INIT_ERROR_BNO055 if IMU setup fails
+ * 
+ * @note This function must be called before init_motors() and init_pid()
  */
 int init_sensors(void);
 
 /**
- * @brief Initialize the motors
- * This function initializes the brushless motors using LEDC PWM.
- * It sets up the GPIO pins, LEDC timers, and channels for motor control.
- * @return int
- *         - INIT_SUCCESS if initialization is successful
- *         - INIT_ERROR_MOTOR if motor initialization fails
+ * @brief Initialize all motor controllers
+ *
+ * Configures LEDC PWM channels and initializes three brushless motor
+ * controllers with speed and direction control signals.
+ *
+ * @return int Status code
+ *         - INIT_SUCCESS on successful initialization
+ *         - INIT_ERROR_MOTOR if any motor fails to initialize
+ * 
+ * @note Requires GPIO pins to be properly configured
  */
 int init_motors(void);
 
 /**
- * @brief Initialize the PID controller
- * This function initializes the PID controller with default parameters.
- * It sets up the PID block handle and configures the PID parameters.
- * @return int
- *         - INIT_SUCCESS if initialization is successful
- *         - INIT_ERROR_PID if PID initialization fails
+ * @brief Initialize PID controllers
+ *
+ * Creates and configures PID control blocks for each motor using
+ * parameters defined in g_pid_param.
+ *
+ * @return int Status code
+ *         - INIT_SUCCESS on successful initialization
+ *         - INIT_ERROR_PID if PID block creation fails
+ * 
+ * @note PID parameters can be tuned in config_utils.h
  */
 int init_pid(void);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif // INIT_H

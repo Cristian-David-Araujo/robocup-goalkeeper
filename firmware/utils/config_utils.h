@@ -1,54 +1,110 @@
+/**
+ * @file config_utils.h
+ * @brief System-wide configuration constants for RoboCup Goalkeeper firmware
+ * 
+ * This header centralizes all configuration parameters for the robot including:
+ * - Physical robot dimensions
+ * - Motor control parameters
+ * - PID controller tuning
+ * - Task timing and priorities
+ * - Sensor filtering parameters
+ * 
+ * All constants follow SCREAMING_SNAKE_CASE naming convention for macros/defines.
+ * 
+ * @note Update these values when calibrating or modifying hardware
+ */
+
 #ifndef CONFIG_UTILS_H
 #define CONFIG_UTILS_H
 
 #include <math.h>
 
-#define ROBOT_NAME "RoboCupGoalkeeper" // Name of the robot
-#define ROBOT_VERSION "1.0" // Version of the robot firmware
-#define ROBOT_BODY_RADIUS 0.08f // Radius of the robot in meters
-#define ROBOT_WHEEL_RADIUS 0.03f // Radius of the robot wheels in meters
-#define ROBOT_WHEEL_0_OFFSET M_PI/6 // Offset angle for wheel 0 in radians
-#define ROBOT_WHEEL_1_OFFSET 5*M_PI/6 // Offset angle for wheel 1 in radians
-#define ROBOT_WHEEL_2_OFFSET 3*M_PI/2 // Offset angle for wheel 2 in radians
+#ifdef __cplusplus
+extern "C" {
+#endif
 
+// =============================================================================
+// ROBOT IDENTIFICATION
+// =============================================================================
 
-#define MOTOR_MAX_SPEED_PERCENT 12  // Maximum speed percentage for motors
-#define MOTOR_MIN_SPEED_PERCENT 5   // Minimum speed percentage for motors
-#define MOTOR_PWM_RESOLUTION_BITS 14 // PWM resolution for motors
-#define MOTOR_MAX_POWER_PERCENT 90 // Maximum power percentage for motors
-#define MOTOR_DIRECTION_FORWARD(i) (((i) == 0) ? -1 : (((i) == 1) ? -1 : (((i) == 2) ? -1 : -1))) // Motor direction forward, i = motor index
+#define ROBOT_NAME "RoboCupGoalkeeper"     ///< Robot name identifier
+#define ROBOT_VERSION "1.0"                ///< Firmware version string
 
+// =============================================================================
+// ROBOT PHYSICAL DIMENSIONS (meters and radians)
+// =============================================================================
 
-/* PID MOTOR configuration */
-#define PID_MOTOR_KP 0.1f                // Proportional gain
-#define PID_MOTOR_KI 0.006f                // Integral gain
-#define PID_MOTOR_KD 0.0f               // Derivative gain
-#define PID_MOTOR_BETA 0.0f              // Beta filter coefficient for derivative term
-#define PID_MOTOR_MAX_OUTPUT 80.0f      // Maximum output of PID controller
-#define PID_MOTOR_MIN_OUTPUT -80.0f     // Minimum output of PID controller
+#define ROBOT_BODY_RADIUS 0.08f            ///< Robot chassis radius (m)
+#define ROBOT_WHEEL_RADIUS 0.03f           ///< Wheel radius (m)
+#define ROBOT_WHEEL_0_OFFSET (M_PI / 6.0f)     ///< Wheel 0 angular offset (rad) - 30°
+#define ROBOT_WHEEL_1_OFFSET (5.0f * M_PI / 6.0f)  ///< Wheel 1 angular offset (rad) - 150°
+#define ROBOT_WHEEL_2_OFFSET (3.0f * M_PI / 2.0f)  ///< Wheel 2 angular offset (rad) - 270°
 
+// =============================================================================
+// MOTOR CONFIGURATION
+// =============================================================================
 
-/** @brief Configuration for sensor reading task
- * 
- * This configuration defines the task period, sample rate, and cutoff frequency
- * for the angular velocity sensor low-pass filter.
- */
-#define SENSOR_TASK_PERIOD_MS 2
-#define SENSOR_TASK_SAMPLE_RATE_HZ (1000.0f/(SENSOR_TASK_PERIOD_MS)) // Sensor reading task sample rate in Hz
-#define SENSOR_CUTOFF_FREQUENCY_OMEGA_HZ 1.0f // Cutoff frequency for angular velocity sensor low-pass filter
-#define SENSOR_KALMAN_Q 0.001f // Process noise covariance for Kalman filter
-#define SENSOR_KALMAN_R 10.0f // Measurement noise covariance for Kalman filter
-// Angular velocity sensor direction (1 for forward, -1 for backward), i = sensor index
-#define SENSOR_ANGULAR_DIRECTION_FORWARD(i) (((i) == 0) ? -1 : ((i) == 1) ? -1 : ((i) == 2) ? -1 : -1)
+#define MOTOR_MAX_SPEED_PERCENT 12         ///< Maximum motor speed (% of PWM range)
+#define MOTOR_MIN_SPEED_PERCENT 5          ///< Minimum motor speed (% of PWM range)
+#define MOTOR_PWM_RESOLUTION_BITS 14       ///< PWM resolution in bits
+#define MOTOR_MAX_POWER_PERCENT 90         ///< Maximum power limit (% of capability)
 
 /**
- * @brief Configuration for control loop task
- * 
+ * @brief Motor direction multiplier for forward motion
+ * @param i Motor index (0, 1, or 2)
+ * @return Direction multiplier: 1 for forward, -1 for reverse
  */
-#define CONTROL_TASK_PERIOD_MS 2 // Control loop task period in milliseconds
-#define CONTROL_TASK_SAMPLE_RATE_HZ (1000.0f/(CONTROL_TASK_PERIOD_MS)) // Control loop sample rate in Hz
+#define MOTOR_DIRECTION_FORWARD(i) (-1)    ///< All motors use -1 for forward
 
-#define KINEMATICS_TASK_PERIOD_MS 10 // Inverse kinematics task period in milliseconds
+// =============================================================================
+// PID CONTROLLER TUNING PARAMETERS
+// =============================================================================
 
-#define BNO055_I2C_MASTER_NUM 0
+#define PID_MOTOR_KP 0.1f                  ///< Proportional gain
+#define PID_MOTOR_KI 0.006f                ///< Integral gain
+#define PID_MOTOR_KD 0.0f                  ///< Derivative gain
+#define PID_MOTOR_BETA 0.0f                ///< Beta filter coefficient for derivative term
+#define PID_MOTOR_MAX_OUTPUT 80.0f         ///< Maximum PID output (% motor speed)
+#define PID_MOTOR_MIN_OUTPUT -80.0f        ///< Minimum PID output (% motor speed)
+
+// =============================================================================
+// SENSOR TASK CONFIGURATION
+// =============================================================================
+
+#define SENSOR_TASK_PERIOD_MS 2            ///< Sensor reading task period (ms)
+#define SENSOR_TASK_SAMPLE_RATE_HZ (1000.0f / SENSOR_TASK_PERIOD_MS)  ///< Sample rate (Hz)
+#define SENSOR_CUTOFF_FREQUENCY_OMEGA_HZ 1.0f  ///< Low-pass filter cutoff frequency (Hz)
+#define SENSOR_KALMAN_Q 0.001f             ///< Kalman filter process noise covariance
+#define SENSOR_KALMAN_R 10.0f              ///< Kalman filter measurement noise covariance
+
+/**
+ * @brief Sensor reading direction multiplier
+ * @param i Sensor index (0, 1, or 2)
+ * @return Direction multiplier: 1 for forward, -1 for reverse
+ */
+#define SENSOR_ANGULAR_DIRECTION_FORWARD(i) (-1)  ///< All sensors use -1 for forward
+
+// =============================================================================
+// CONTROL LOOP CONFIGURATION
+// =============================================================================
+
+#define CONTROL_TASK_PERIOD_MS 2           ///< Control loop period (ms)
+#define CONTROL_TASK_SAMPLE_RATE_HZ (1000.0f / CONTROL_TASK_PERIOD_MS)  ///< Sample rate (Hz)
+
+// =============================================================================
+// KINEMATICS TASK CONFIGURATION
+// =============================================================================
+
+#define KINEMATICS_TASK_PERIOD_MS 10       ///< Inverse kinematics task period (ms)
+
+// =============================================================================
+// I2C BUS CONFIGURATION
+// =============================================================================
+
+#define BNO055_I2C_MASTER_NUM 0            ///< I2C master port for BNO055 IMU
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif // CONFIG_UTILS_H

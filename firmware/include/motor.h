@@ -1,11 +1,28 @@
+/**
+ * @file motor.h
+ * @brief Brushless motor control interface using ESP32 LEDC PWM
+ * 
+ * This module provides functions to initialize and control brushless DC motors
+ * using the ESP32's LEDC (LED Control) peripheral for PWM generation.
+ * 
+ * Features:
+ * - Bidirectional speed control with signed percentage input
+ * - Configurable speed limits and PWM resolution
+ * - Motor calibration routines
+ * 
+ * Thread-safety: Functions are NOT thread-safe. External synchronization required
+ * if motors are controlled from multiple tasks.
+ * 
+ * @note All identifiers follow snake_case naming convention
+ */
+
 #ifndef MOTOR_H
 #define MOTOR_H
 
 #include <stdint.h>
 #include <stdbool.h>
 #include "driver/ledc.h"
-
-#include "config_utils.h" // For motor configuration constants
+#include "config_utils.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,66 +30,96 @@ extern "C" {
 
 /**
  * @brief Brushless motor configuration and state structure
+ * 
+ * Contains all parameters needed to control a single brushless motor via PWM.
+ * This structure should be initialized with hardware-specific values before
+ * calling motor_init().
+ * 
+ * Thread-safety: Not thread-safe. Do not modify while motor is active.
  */
 typedef struct {
-    int pwm_pin_speed;              /**< GPIO pin for speed PWM signal */
-    int pwm_pin_reverse;           /**< GPIO pin for reverse direction PWM signal */
-    uint8_t resolution_bits;       /**< PWM resolution in bits (e.g., 8–15) */
-    uint8_t max_speed_percent;     /**< Max speed allowed as a percentage (0–100) */
-    uint8_t min_speed_percent;     /**< Min speed allowed as a percentage (0–100) */
-    uint8_t max_power_percent;    /**< Max power allowed as a percentage (0–100) */
-    ledc_timer_t timer_num;        /**< LEDC timer used for PWM */
-    ledc_mode_t speed_mode;        /**< LEDC speed mode (high or low) */
-    ledc_channel_t speed_channel;  /**< LEDC channel for speed */
-    ledc_channel_t reverse_channel;/**< LEDC channel for reverse signal */
-    bool is_reversed;              /**< Current direction state */
+    int pwm_pin_speed;              ///< GPIO pin for speed PWM signal
+    int pwm_pin_reverse;            ///< GPIO pin for reverse direction PWM signal
+    uint8_t resolution_bits;        ///< PWM resolution in bits (8-15 typical)
+    uint8_t max_speed_percent;      ///< Maximum allowed speed as percentage (0-100)
+    uint8_t min_speed_percent;      ///< Minimum allowed speed as percentage (0-100)
+    uint8_t max_power_percent;      ///< Maximum power limit as percentage (0-100)
+    ledc_timer_t timer_num;         ///< LEDC timer number for this motor
+    ledc_mode_t speed_mode;         ///< LEDC speed mode (LEDC_HIGH_SPEED_MODE or LEDC_LOW_SPEED_MODE)
+    ledc_channel_t speed_channel;   ///< LEDC channel for speed control
+    ledc_channel_t reverse_channel; ///< LEDC channel for reverse signal
+    bool is_reversed;               ///< Current direction state (true = reverse)
 } motor_brushless_t;
 
 /**
- * @brief Initialize the brushless motor using LEDC PWM
+ * @brief Initialize a brushless motor using LEDC PWM
  * 
- * @param motor Pointer to the motor configuration structure
- * @return true on success, false on failure
+ * Configures the LEDC timer and channels for motor control. Sets initial
+ * speed to minimum and direction to forward.
+ * 
+ * @param[in,out] motor Pointer to motor configuration structure
+ * @return true on successful initialization, false on failure
+ * 
+ * @note This function configures hardware and must be called before any
+ *       other motor control functions.
  */
 bool motor_init(motor_brushless_t *motor);
 
 /**
- * @brief Set motor speed with signed percentage.
+ * @brief Set motor speed with signed percentage
  *
- * @param motor Pointer to motor instance.
- * @param signed_speed_percent Speed in range [-100.0, 100.0]. Negative values mean reverse.
+ * Controls motor speed and direction using a signed percentage value.
+ * Negative values indicate reverse direction, positive values forward.
+ * The function automatically handles:
+ * - Input clamping to [-100.0, 100.0]
+ * - Scaling to configured min/max speed limits
+ * - Direction signal generation
+ * 
+ * @param[in,out] motor Pointer to motor instance
+ * @param[in] signed_speed_percent Speed in range [-100.0, 100.0]
+ *                                 Negative = reverse, Positive = forward
+ * 
+ * Thread-safety: Not thread-safe. Caller must ensure exclusive access.
  */
 void motor_set_speed(motor_brushless_t *motor, float signed_speed_percent);
 
 /**
- * @brief Stop the motor (set speed to 0)
+ * @brief Stop the motor (set speed to minimum)
  * 
- * @param motor Pointer to the motor instance
+ * Sets motor speed to the configured minimum value and clears reverse signal.
+ * Motor will be in a stopped/idle state after this call.
+ * 
+ * @param[in,out] motor Pointer to motor instance
  */
 void motor_stop(motor_brushless_t *motor);
 
-
 /**
- * @brief Calibrate the motor by setting the speed to 0 and reversing direction
+ * @brief Calibrate a single motor
  * 
- * This function is used to calibrate the motor by setting it to a known state.
- * It can be used during initialization or when the motor needs to be reset.
+ * Performs motor calibration sequence by holding at minimum speed for
+ * a defined period. Used during initialization to establish baseline.
  * 
- * @param motor Pointer to the motor instance
+ * @param[in,out] motor Pointer to motor instance
+ * 
+ * @warning This function blocks for several seconds
  */
 void motor_calibration(motor_brushless_t *motor);
 
 /**
- * @brief Calibrate three brushless motors
+ * @brief Calibrate three brushless motors simultaneously
  * 
- * This function calibrates three motors by calling motor_calibration for each.
- * It is typically used during system initialization to ensure all motors are in a known state.
+ * Calibrates three motors in parallel by setting them to minimum speed
+ * and waiting for stabilization. Typically used during system startup.
  * 
- * @param motor_0 Pointer to the first motor instance
- * @param motor_1 Pointer to the second motor instance
- * @param motor_2 Pointer to the third motor instance
+ * @param[in,out] motor_0 Pointer to first motor instance
+ * @param[in,out] motor_1 Pointer to second motor instance
+ * @param[in,out] motor_2 Pointer to third motor instance
+ * 
+ * @warning This function blocks for several seconds
  */
-void motor_calibration3(motor_brushless_t *motor_0, motor_brushless_t *motor_1, motor_brushless_t *motor_2);
+void motor_calibration3(motor_brushless_t *motor_0, 
+                       motor_brushless_t *motor_1, 
+                       motor_brushless_t *motor_2);
 
 #ifdef __cplusplus
 }

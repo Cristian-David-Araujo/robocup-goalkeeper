@@ -1,42 +1,75 @@
+/**
+ * @file types_utils.h
+ * @brief Common type definitions for the RoboCup Goalkeeper firmware
+ * 
+ * This header defines data structures used throughout the firmware for sensor readings,
+ * velocity commands, and wheel speed control. All types follow snake_case naming convention.
+ * 
+ * Thread-safety: The structures defined here are plain data types. Synchronization
+ * must be handled by the calling code using appropriate FreeRTOS primitives.
+ */
+
 #ifndef TYPES_UTILS_H
 #define TYPES_UTILS_H
 
 #include <stdint.h>
 
-#define NUM_ENCODERS 3  // Update if you have more encoders
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/// @brief Per-encoder data
+/// @brief Number of motor encoders in the system
+#define NUM_ENCODERS 3
+
+/**
+ * @brief Per-encoder sensor reading
+ * 
+ * Contains angle and angular velocity data from a single encoder.
+ * Thread-safety: Not thread-safe. Protect with mutex when sharing between tasks.
+ */
 typedef struct {
     float angle_deg;    ///< Angle in degrees [0, 360)
     float omega_rad;    ///< Angular velocity in radians per second
-} EncoderReading;
+} encoder_reading_t;
 
-/// @brief Shared structure for all sensor readings
+/**
+ * @brief Aggregate sensor data from all encoders
+ * 
+ * Contains readings from all encoder sensors in the system.
+ * Thread-safety: Not thread-safe. Use xSensorDataMutex for inter-task access.
+ */
 typedef struct {
-    EncoderReading encoders[NUM_ENCODERS];  ///< Encoder readings
-    // Add more fields below if needed (e.g., IMU data)
-    // float imu_pitch;
-    // float imu_yaw;
-} RawSensorData;
+    encoder_reading_t encoders[NUM_ENCODERS];  ///< Array of encoder readings
+    // Extensible for additional sensors (e.g., IMU data)
+    // float imu_pitch_rad;
+    // float imu_yaw_rad;
+} raw_sensor_data_t;
 
-
-/// @brief Velocity command structure
-/// Contains linear and angular velocities for the robot
+/**
+ * @brief Robot velocity in Cartesian coordinates
+ * 
+ * Represents the desired or actual robot velocity with linear components
+ * in the x and y directions and angular velocity around z-axis.
+ * Thread-safety: Not thread-safe. Protect with mutex when sharing between tasks.
+ */
 typedef struct {
-    float vx;  // m/s
-    float vy;  // m/s
-    float wz;  // rad/s
-} Velocity;
+    float vx;  ///< Linear velocity in x-direction (m/s)
+    float vy;  ///< Linear velocity in y-direction (m/s)
+    float wz;  ///< Angular velocity around z-axis (rad/s)
+} velocity_t;
 
-/// @brief Wheel speeds structure
-/// Contains angular velocities for each wheel
-/// Each wheel speed is in radians per second
+/**
+ * @brief Wheel angular velocities for omnidirectional drive
+ * 
+ * Contains target or measured angular velocities for all three wheels.
+ * Thread-safety: Not thread-safe. Protect with mutex when sharing between tasks.
+ */
 typedef struct {
-    float phi_dot[3];  // rad/s for wheel 1, 2, 3
-} WheelSpeeds;
+    float phi_dot[3];  ///< Angular velocity (rad/s) for wheels 0, 1, 2
+} wheel_speeds_t;
 
-// // Declare globally accessible instance and mutex (defined in sensor_data.c)
-// extern RawSensorData sensor_data;
-// extern SemaphoreHandle_t xSensorDataMutex;
+#ifdef __cplusplus
+}
+#endif
 
-#endif //TYPES_UTILS_H
+#endif // TYPES_UTILS_H
