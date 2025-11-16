@@ -37,7 +37,7 @@ static const char *TAG = "MAIN";
 // =============================================================================
 
 motor_brushless_t g_motor[3];
-AS5600_t g_as5600[3];
+as5600_t g_as5600[3];
 BNO055_t g_bno055;
 adc_oneshot_unit_handle_t g_shared_adc_handle;
 
