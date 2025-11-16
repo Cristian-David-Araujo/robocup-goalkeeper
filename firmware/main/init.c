@@ -36,7 +36,7 @@ int init_sensors(void)
 
     // Initialize each AS5600 encoder with shared ADC
     for (int i = 0; i < 3; i++) {
-        as5600_init_adc_shared(&g_as5600[i], g_shared_adc_handle);
+        AS5600_InitADC_2(&g_as5600[i], g_shared_adc_handle);
     }
     
     ESP_LOGI(TAG, "AS5600 encoders initialized successfully");

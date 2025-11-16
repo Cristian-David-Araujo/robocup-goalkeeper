@@ -1,6 +1,6 @@
 #include "as5600.h"
 
-void as5600_init(as5600_t *as5600, i2c_port_t i2c_num, uint8_t scl, uint8_t sda, uint8_t out)
+void AS5600_Init(AS5600_t *as5600, i2c_port_t i2c_num, uint8_t scl, uint8_t sda, uint8_t out)
 {
     as5600->out = out; // Set the GPIO pin connected to the OUT pin of the AS5600 sensor
 
@@ -12,14 +12,14 @@ void as5600_init(as5600_t *as5600, i2c_port_t i2c_num, uint8_t scl, uint8_t sda,
 
 }
 
-void as5600_deinit(as5600_t *as5600)
+void AS5600_Deinit(AS5600_t *as5600)
 {
     i2c_deinit(&as5600->i2c_handle);
     adc_deinit(&as5600->adc_handle);
     gpio_deinit(&as5600->gpio_handle);
 }
 
-float as5600_adc_get_angle(as5600_t *as5600)
+float AS5600_ADC_GetAngle(AS5600_t *as5600)
 {
     float angle;
     if (as5600->adc_handle.is_calibrated && as5600->conf.OUTS == AS5600_OUTPUT_STAGE_ANALOG_RR) {
@@ -34,19 +34,19 @@ float as5600_adc_get_angle(as5600_t *as5600)
     return angle;
 }
 
-void as5600_burn_angle_command(as5600_t *as5600)
+void AS5600_BurnAngleCommand(AS5600_t *as5600)
 {
     uint8_t data = AS5600_BURN_MODE_BURN_ANGLE;
     i2c_write_reg(&as5600->i2c_handle, AS5600_REG_BURN, (uint8_t *)&data, 1);
 }
 
-void as5600_burn_setting_command(as5600_t *as5600)
+void AS5600_BurnSettingCommand(AS5600_t *as5600)
 {
     uint8_t data = AS5600_BURN_MODE_BURN_SETTING;
     i2c_write_reg(&as5600->i2c_handle, AS5600_REG_BURN, (uint8_t *)&data, 1);
 }
 
-as5600_reg_t as5600_reg_str_to_addr(as5600_t *as5600, const char *reg_str)
+AS5600_reg_t AS5600_RegStrToAddr(AS5600_t *as5600, const char *reg_str)
 {
     if (strcmp(reg_str, "zmco") == 0) {
         as5600->reg = AS5600_REG_ZMCO;
@@ -87,9 +87,9 @@ as5600_reg_t as5600_reg_str_to_addr(as5600_t *as5600, const char *reg_str)
     return as5600->reg;
 }
 
-void as5600_read_reg(as5600_t *as5600, as5600_reg_t reg, uint16_t *data)
+void AS5600_ReadReg(AS5600_t *as5600, AS5600_reg_t reg, uint16_t *data)
 {
-    if (!as5600_is_valid_read_reg(as5600, reg)) {
+    if (!AS5600_IsValidReadReg(as5600, reg)) {
         printf("Invalid register");
         return;
     }
@@ -105,9 +105,9 @@ void as5600_read_reg(as5600_t *as5600, as5600_reg_t reg, uint16_t *data)
     }
 }
 
-void as5600_write_reg(as5600_t *as5600, as5600_reg_t reg, uint16_t data)
+void AS5600_WriteReg(AS5600_t *as5600, AS5600_reg_t reg, uint16_t data)
 {
-    if (!as5600_is_valid_write_reg(as5600, reg)) {
+    if (!AS5600_IsValidWriteReg(as5600, reg)) {
         printf("Invalid register");
         return;
     }
@@ -122,7 +122,7 @@ void as5600_write_reg(as5600_t *as5600, as5600_reg_t reg, uint16_t data)
     }
 }
 
-bool as5600_is_valid_read_reg(as5600_t *as5600, as5600_reg_t reg)
+bool AS5600_IsValidReadReg(AS5600_t *as5600, AS5600_reg_t reg)
 {
     if (reg == AS5600_REG_ZMCO || reg == AS5600_REG_ZPOS_H || reg == AS5600_REG_ZPOS_L || 
         reg == AS5600_REG_MPOS_H || reg == AS5600_REG_MPOS_L || reg == AS5600_REG_MANG_H || 
@@ -136,7 +136,7 @@ bool as5600_is_valid_read_reg(as5600_t *as5600, as5600_reg_t reg)
     return false;
 }
 
-bool as5600_is_valid_write_reg(as5600_t *as5600, as5600_reg_t reg)
+bool AS5600_IsValidWriteReg(AS5600_t *as5600, AS5600_reg_t reg)
 {
     if (reg == AS5600_REG_ZPOS_H || reg == AS5600_REG_ZPOS_L || reg == AS5600_REG_MPOS_H || 
         reg == AS5600_REG_MPOS_L || reg == AS5600_REG_MANG_H || reg == AS5600_REG_MANG_L || 
@@ -149,7 +149,7 @@ bool as5600_is_valid_write_reg(as5600_t *as5600, as5600_reg_t reg)
 
 // -------------------------------------------------------------
 // ------------------ GPIO and ADC FUNCTIONS -------------------
-void as5600_init_adc(as5600_t *as5600)
+void AS5600_InitADC(AS5600_t *as5600)
 {
     // ADC pin OUT configuration 
     if (adc_init(&as5600->adc_handle, as5600->out)) {
@@ -157,7 +157,7 @@ void as5600_init_adc(as5600_t *as5600)
     } 
 }
 
-void as5600_init_adc_shared(as5600_t *as5600, adc_oneshot_unit_handle_t shared_handle)
+void AS5600_InitADC_2(AS5600_t *as5600, adc_oneshot_unit_handle_t shared_handle)
 {
     if (adc_config_channel(&as5600->adc_handle, as5600->out, shared_handle)) {
         printf("AS5600 on GPIO %d initialized.\n", as5600->out);
@@ -167,12 +167,12 @@ void as5600_init_adc_shared(as5600_t *as5600, adc_oneshot_unit_handle_t shared_h
 }
 
 
-void as5600_deinit_adc(as5600_t *as5600)
+void AS5600_DeinitADC(AS5600_t *as5600)
 {
     adc_deinit(&as5600->adc_handle);
 }
 
-void as5600_init_gpio(as5600_t *as5600)
+void AS5600_InitGPIO(AS5600_t *as5600)
 {
     // GPIO pin OUT configuration 
     if (!gpio_init_basic(&as5600->gpio_handle, as5600->out, 2, false, false)) {
@@ -182,12 +182,12 @@ void as5600_init_gpio(as5600_t *as5600)
     gpio_set_low(&as5600->gpio_handle); // Set the GPIO to low (calibration process)
 }
 
-void as5600_deinit_gpio(as5600_t *as5600)
+void AS5600_DeinitGPIO(AS5600_t *as5600)
 {
     gpio_deinit(&as5600->gpio_handle);
 }
 
-void as5600_set_gpio(as5600_t *as5600, uint8_t value)
+void AS5600_SetGPIO(AS5600_t *as5600, uint8_t value)
 {
     if (value) {
         gpio_set_high(&as5600->gpio_handle);
@@ -201,50 +201,50 @@ void as5600_set_gpio(as5600_t *as5600, uint8_t value)
 // ---------------------- CONFIG REGISTERS ---------------------
 // -------------------------------------------------------------
 
-void as5600_set_start_position(as5600_t *as5600, uint16_t start_position)
+void AS5600_SetStartPosition(AS5600_t *as5600, uint16_t start_position)
 {
     uint8_t write_buffer[] = {AS5600_REG_ZPOS_H, start_position >> 8, start_position};
     i2c_write(&as5600->i2c_handle, write_buffer, 3);
 }
 
-void as5600_get_start_position(as5600_t *as5600, uint16_t *start_position)
+void AS5600_GetStartPosition(AS5600_t *as5600, uint16_t *start_position)
 {
     i2c_read_reg(&as5600->i2c_handle, AS5600_REG_ZPOS_H, (uint8_t *)start_position, 2);
     *start_position = (*start_position << 8) | (*start_position >> 8);
 }
 
-void as5600_set_stop_position(as5600_t *as5600, uint16_t stop_position)
+void AS5600_SetStopPosition(AS5600_t *as5600, uint16_t stop_position)
 {
     uint8_t write_buffer[] = {AS5600_REG_MPOS_H, stop_position >> 8, stop_position };
     i2c_write(&as5600->i2c_handle, write_buffer, 3);
 }
 
-void as5600_get_stop_position(as5600_t *as5600, uint16_t *stop_position)
+void AS5600_GetStopPosition(AS5600_t *as5600, uint16_t *stop_position)
 {
     i2c_read_reg(&as5600->i2c_handle, AS5600_REG_MPOS_H, (uint8_t *)stop_position, 2);
     *stop_position = (*stop_position << 8) | (*stop_position >> 8);
 }
 
-void as5600_set_max_angle(as5600_t *as5600, uint16_t max_angle)
+void AS5600_SetMaxAngle(AS5600_t *as5600, uint16_t max_angle)
 {
     uint8_t write_buffer[] = {AS5600_REG_MANG_H, max_angle >> 8, max_angle};
     i2c_write(&as5600->i2c_handle, write_buffer, 3);
 }
 
-void as5600_get_max_angle(as5600_t *as5600, uint16_t *max_angle)
+void AS5600_GetMaxAngle(AS5600_t *as5600, uint16_t *max_angle)
 {
     i2c_read_reg(&as5600->i2c_handle, AS5600_REG_MANG_H, (uint8_t *)max_angle, 2);
     *max_angle = (*max_angle << 8) | (*max_angle >> 8);
 }
 
-void as5600_set_conf(as5600_t *as5600, as5600_config_t conf)
+void AS5600_SetConf(AS5600_t *as5600, AS5600_config_t conf)
 {
     as5600->conf = conf;
     uint8_t write_buffer[] = {AS5600_REG_CONF_H, conf.WORD >> 8, conf.WORD};
     i2c_write(&as5600->i2c_handle, write_buffer, 3);
 }
 
-void as5600_get_conf(as5600_t *as5600, as5600_config_t *conf)
+void AS5600_GetConf(AS5600_t *as5600, AS5600_config_t *conf)
 {
     i2c_read_reg(&as5600->i2c_handle, AS5600_REG_CONF_H, (uint8_t *)&conf->WORD, 2);    
     conf->WORD = (conf->WORD << 8) | (conf->WORD >> 8);
@@ -254,13 +254,13 @@ void as5600_get_conf(as5600_t *as5600, as5600_config_t *conf)
 // ---------------------- OUTPUT REGISTERS ---------------------
 // -------------------------------------------------------------
 
-void as5600_get_raw_angle(as5600_t *as5600, uint16_t *raw_angle)
+void AS5600_GetRawAngle(AS5600_t *as5600, uint16_t *raw_angle)
 {
     i2c_read_reg(&as5600->i2c_handle, AS5600_REG_RAW_ANGLE_H, (uint8_t *)raw_angle, 2);
     *raw_angle = (*raw_angle << 8) | (*raw_angle >> 8);
 }
 
-void as5600_get_angle(as5600_t *as5600, uint16_t *angle)
+void AS5600_GetAngle(AS5600_t *as5600, uint16_t *angle)
 {
     i2c_read_reg(&as5600->i2c_handle, AS5600_REG_ANGLE_H, (uint8_t *)angle, 2);
     *angle = (*angle << 8) | (*angle >> 8);
@@ -270,17 +270,17 @@ void as5600_get_angle(as5600_t *as5600, uint16_t *angle)
 // ---------------------- STATUS REGISTERS ---------------------
 // -------------------------------------------------------------
 
-void as5600_get_status(as5600_t *as5600, uint8_t *status)
+void AS5600_GetStatus(AS5600_t *as5600, uint8_t *status)
 {
     i2c_read_reg(&as5600->i2c_handle, AS5600_REG_STATUS, status, 1);
 }
 
-void as5600_get_agc(as5600_t *as5600, uint8_t *agc)
+void AS5600_GetAgc(AS5600_t *as5600, uint8_t *agc)
 {
     i2c_read_reg(&as5600->i2c_handle, AS5600_REG_AGC, agc, 1);
 }
 
-void as5600_get_magnitude(as5600_t *as5600, uint16_t *magnitude)
+void AS5600_GetMagnitude(AS5600_t *as5600, uint16_t *magnitude)
 {
     i2c_read_reg(&as5600->i2c_handle, AS5600_REG_MAGNITUDE_H, (uint8_t *)magnitude, 2);
     *magnitude = (*magnitude << 8) | (*magnitude >> 8);

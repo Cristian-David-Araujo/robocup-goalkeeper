@@ -1,11 +1,11 @@
 /**
  * @file bno055.h
  * @author Cristian David Araujo A. (cristian.araujo@udea.edu.co)
- * @brief BNO055 9-axis IMU sensor driver interface
+ * @brief 
  * @version 0.1
- * @date 2025
+ * @date 2024-11-08
  * 
- * @copyright Copyright (c) 2025
+ * @copyright Copyright (c) 2024
  * 
  */
 
@@ -23,8 +23,8 @@
 // Constants for BNO055 include
 #include "bno055_defs.h"
 
-#define I2C_MASTER_FREQ_HZ  400000      ///< I2C master clock frequency (400 kHz)
-#define BNO055_SENSOR_ADDR  0x29        ///< Slave address for BNO055 sensor
+#define I2C_MASTER_FREQ_HZ  400*1000    /*!< I2C master clock frequency */
+#define BNO055_SENSOR_ADDR  0x29        /*!< slave address for BNO055 sensor */
 
 /**
  * @brief Enumerated type for the operation mode of the BNO055 sensor
@@ -45,7 +45,7 @@ typedef enum {
     NDOF_FMC_OFF = 0x0B,
     NDOF = 0x0C,
     INIT = 0x0D
-} bno055_operation_mode_t;
+} BNO055_OperationMode;
 
 /**
  * @brief Enum power mode of the BNO055 sensor
@@ -55,7 +55,7 @@ typedef enum {
     NORMAL = BNO055_POWER_MODE_NORMAL,
     LOWPOWER = BNO055_POWER_MODE_LOWPOWER,
     SUSPEND = BNO055_POWER_MODE_SUSPEND
-} bno055_power_mode_t;
+} BNO055_PowerMode;
 
 
 /**
@@ -63,12 +63,12 @@ typedef enum {
  * 
  */
 typedef struct {
-    uint8_t accel_unit; ///< Accelerometer unit
-    uint8_t gyro_unit; ///< Gyroscope unit
-    uint8_t euler_unit; ///< Euler unit
-    uint8_t temp_unit; ///< Temperature unit
-    uint8_t ori_unit; ///< Orientation unit
-} bno055_unit_settings_t;
+    uint8_t accel_unit; ///> Accelerometer unit
+    uint8_t gyro_unit; ///> Gyroscope unit
+    uint8_t euler_unit; ///> Euler unit
+    uint8_t temp_unit; ///> Temperature unit
+    uint8_t ori_unit; ///> Orientation unit
+} BNO055_UnitSettings_t;
 
 /**
  * @brief Srtucture for calibration profile of the BNO055 sensor
@@ -76,67 +76,67 @@ typedef struct {
  * This structure is used to save the calibration profile of the BNO055 sensor.
  */
 typedef struct {
-    uint8_t sys_calib_stat; ///< System calibration status
-    uint16_t accel_offset_x; ///< Accelerometer offset X
-    uint16_t accel_offset_y; ///< Accelerometer offset Y
-    uint16_t accel_offset_z; ///< Accelerometer offset Z
-    uint16_t mag_offset_x; ///< Magnetometer offset X
-    uint16_t mag_offset_y; ///< Magnetometer offset Y
-    uint16_t mag_offset_z; ///< Magnetometer offset Z
-    uint16_t gyro_offset_x; ///< Gyroscope offset X
-    uint16_t gyro_offset_y; ///< Gyroscope offset Y
-    uint16_t gyro_offset_z; ///< Gyroscope offset Z
-    uint16_t accel_radius; ///< Accelerometer radius
-    uint16_t mag_radius; ///< Magnetometer radius
-} bno055_calib_profile_t;
+    uint8_t sys_calib_stat; ///> System calibration status
+    uint16_t accel_offset_x; ///> Accelerometer offset X
+    uint16_t accel_offset_y; ///> Accelerometer offset Y
+    uint16_t accel_offset_z; ///> Accelerometer offset Z
+    uint16_t mag_offset_x; ///> Magnetometer offset X
+    uint16_t mag_offset_y; ///> Magnetometer offset Y
+    uint16_t mag_offset_z; ///> Magnetometer offset Z
+    uint16_t gyro_offset_x; ///> Gyroscope offset X
+    uint16_t gyro_offset_y; ///> Gyroscope offset Y
+    uint16_t gyro_offset_z; ///> Gyroscope offset Z
+    uint16_t accel_radius; ///> Accelerometer radius
+    uint16_t mag_radius; ///> Magnetometer radius
+} BNO055_CalibProfile_t;
 
 /**
  * @brief Structure for the BNO055 sensor
  * 
  */
 typedef struct {
-    uart_t uart_config; ///< UART configuration structure
+    uart_t uart_config; ///> UART configuration structure
     i2c_t i2c_handle;   ///< I2C handle for the BNO055 sensor
-    bno055_operation_mode_t operation_mode; ///< Operation mode of the BNO055 sensor
-    bno055_power_mode_t power_mode; ///< Power mode of the BNO055 sensor
-    bno055_unit_settings_t unit_settings; ///< Unit settings of the BNO055 sensor
+    BNO055_OperationMode operation_mode; ///> Operation mode of the BNO055 sensor
+    BNO055_PowerMode power_mode; ///> Power mode of the BNO055 sensor
+    BNO055_UnitSettings_t unit_settings; ///> Unit settings of the BNO055 sensor
 
-    ///< Buffer for data
-    uint8_t buffer[128]; ///< Buffer for data
+    ///> Buffer for data
+    uint8_t buffer[128]; ///> Buffer for data
 
-    ///< BNO055 sensor data
-    uint8_t chip_id; ///< Chip ID
-    uint8_t sw_rev_id[2]; ///< Software revision ID
-    uint8_t page_id; ///< Page ID
-    uint8_t accel_rev_id; ///< Accelerometer revision ID
-    uint8_t mag_rev_id; ///< Magnetometer revision ID
-    uint8_t gyro_rev_id; ///< Gyroscope revision ID
-    uint8_t bl_rev_id; ///< Bootloader revision ID
+    ///> BNO055 sensor data
+    uint8_t chip_id; ///> Chip ID
+    uint8_t sw_rev_id[2]; ///> Software revision ID
+    uint8_t page_id; ///> Page ID
+    uint8_t accel_rev_id; ///> Accelerometer revision ID
+    uint8_t mag_rev_id; ///> Magnetometer revision ID
+    uint8_t gyro_rev_id; ///> Gyroscope revision ID
+    uint8_t bl_rev_id; ///> Bootloader revision ID
 
-    ///< Calibration data
-    uint8_t calib_stat; ///< Calibration status
-    uint8_t test_stat; ///< Self test status
+    ///> Calibration data
+    uint8_t calib_stat; ///> Calibration status
+    uint8_t test_stat; ///> Self test status
 
-    ///< data
-    float yaw; ///< Yaw value
-    float pitch; ///< Pitch value
-    float roll; ///< Roll value
+    ///> data
+    float yaw; ///> Yaw value
+    float pitch; ///> Pitch value
+    float roll; ///> Roll value
 
-    float ax; ///< Accelerometer X value
-    float ay; ///< Accelerometer Y value
-    float az; ///< Accelerometer Z value
+    float ax; ///> Accelerometer X value
+    float ay; ///> Accelerometer Y value
+    float az; ///> Accelerometer Z value
 
-    float gx; ///< Gyroscope X value
-    float gy; ///< Gyroscope Y value
-    float gz; ///< Gyroscope Z value
+    float gx; ///> Gyroscope X value
+    float gy; ///> Gyroscope Y value
+    float gz; ///> Gyroscope Z value
 
-    float mx; ///< Magnetometer X value
-    float my; ///< Magnetometer Y value
-    float mz; ///< Magnetometer Z value
+    float mx; ///> Magnetometer X value
+    float my; ///> Magnetometer Y value
+    float mz; ///> Magnetometer Z value
 
-    gpio_t rst_pin; ///< Reset pin
+    gpio_t rst_pin; ///> Reset pin
     
-} bno055_t;
+} BNO055_t;
 
 
 /**
@@ -146,14 +146,14 @@ typedef struct {
  * 
  * @param bno055 Pointer to the BNO055 sensor structure
  */
-int8_t bno055_init(bno055_t *bno055, uint8_t sda, uint8_t scl, uint8_t i2c_num);
+int8_t BNO055_Init(BNO055_t *bno055, uint8_t sda, uint8_t scl, uint8_t i2c_num);
 
 /**
  * @brief Reset the BNO055 sensor
  * 
  * @param bno055 
  */
-void bno055_reset(bno055_t *bno055);
+void BNO055_Reset(BNO055_t *bno055);
 
 /**
  * @brief Get the calibration status of the BNO055 sensor
@@ -163,7 +163,7 @@ void bno055_reset(bno055_t *bno055);
  * 
  * @param bno055 Pointer to the BNO055 sensor structure
  */
-int8_t bno055_get_calibration_status(bno055_t *bno055);
+int8_t BNO055_GetCalibrationStatus(BNO055_t *bno055);
 
 /**
  * @brief Get information from the BNO055 sensor
@@ -173,7 +173,7 @@ int8_t bno055_get_calibration_status(bno055_t *bno055);
  * 
  * @param bno055 Pointer to the BNO055 sensor structure
  */
-int8_t bno055_get_info(bno055_t *bno055);
+int8_t BNO055_GetInfo(BNO055_t *bno055);
 
 /**
  * @brief Set the operation mode of the BNO055 sensor
@@ -198,7 +198,7 @@ int8_t bno055_get_info(bno055_t *bno055);
  * 
  * @param mode Mode of operation 
  */
-int8_t bno055_set_operation_mode(bno055_t *bno055, bno055_operation_mode_t mode);
+int8_t BNO055_SetOperationMode(BNO055_t *bno055, BNO055_OperationMode mode);
 
 /**
  * @brief Get the operation mode of the BNO055 sensor
@@ -210,7 +210,7 @@ int8_t bno055_set_operation_mode(bno055_t *bno055, bno055_operation_mode_t mode)
  * @param pitch Pointer to a variable where the pitch value will be stored
  * @param roll Pointer to a variable where the roll value will be stored
  */
-void bno055_get_euler_angles(bno055_t *bno055, float *yaw , float *pitch , float *roll);
+void BNO055_GetEulerAngles(BNO055_t *bno055, float *yaw , float *pitch , float *roll); ///> Getorientation data ( Euler angles )
 
 /**
  * @brief Get the linear acceleration of the BNO055 sensor
@@ -222,7 +222,7 @@ void bno055_get_euler_angles(bno055_t *bno055, float *yaw , float *pitch , float
  * @param y Pointer to a variable where the y value will be stored
  * @param z Pointer to a variable where the z value will be stored
  */
-void bno055_get_acceleration(bno055_t *bno055, float *x, float *y, float *z);
+void BNO055_GetAcceleration(BNO055_t *bno055, float *x, float *y, float *z);///> Get linear acceleration
 
 /**
  * @brief Get the gyroscope data of the BNO055 sensor
@@ -232,7 +232,7 @@ void bno055_get_acceleration(bno055_t *bno055, float *x, float *y, float *z);
  * @param gy Pointer to a variable where the gy value will be stored
  * @param gz Pointer to a variable where the gz value will be stored
  */
-void bno055_get_gyro(bno055_t *bno055, float *gx , float *gy , float *gz);
+void BNO055_GetGyro(BNO055_t *bno055, float *gx , float *gy , float *gz); ///> Get gyroscope data
 
 /**
  * @brief Get the magnetic field of the BNO055 sensor
@@ -244,7 +244,7 @@ void bno055_get_gyro(bno055_t *bno055, float *gx , float *gy , float *gz);
  * @param my Pointer to a variable where the my value will be stored
  * @param mz Pointer to a variable where the mz value will be stored
  */
-void bno055_get_magnetometer(bno055_t *bno055, float *mx , float *my , float *mz);
+void BNO055_GetMagnetometer(BNO055_t *bno055, float *mx , float *my , float *mz);///> Get magnetometer data
 
 /**
  * @brief Fuctión to send data to the BNO055 sensor for UART communication
@@ -254,7 +254,7 @@ void bno055_get_magnetometer(bno055_t *bno055, float *mx , float *my , float *mz
  * @param data Pointer to the data to write
  * @param len Length of the data to write in bytes
  */
- int8_t bno055_write_uart(bno055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
+ int8_t BN055_Write_Uart(BNO055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
 
 /**
  * @brief Fuctión to send data to the BNO055 sensor for I2C communication
@@ -264,7 +264,7 @@ void bno055_get_magnetometer(bno055_t *bno055, float *mx , float *my , float *mz
  * @param data Pointer to the data to write
  * @param len Length of the data to write in bytes
  */
-int8_t bno055_write(bno055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
+int8_t BN055_Write(BNO055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
 
 /**
  * @brief Function to read data from the BNO055 sensor for UART communication
@@ -276,7 +276,7 @@ int8_t bno055_write(bno055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
  * @param timeout_ms Timeout in milliseconds
  * @return int8_t
  */
-int8_t bno055_read_uart(bno055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len, uint8_t timeout_ms);
+int8_t BNO055_Read_Uart(BNO055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len, uint8_t timeout_ms);
 
 /**
  * @brief Function to read data from the BNO055 sensor for I2C communication
@@ -287,7 +287,7 @@ int8_t bno055_read_uart(bno055_t *bno055, uint8_t reg, uint8_t *data, uint8_t le
  * @param len Length of the data to read in bytes
  * @return int8_t
  */
- int8_t bno055_read(bno055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
+ int8_t BNO055_Read(BNO055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
 
 /**
  * @brief Check the ACK value of the BNO055 sensor
@@ -295,7 +295,7 @@ int8_t bno055_read_uart(bno055_t *bno055, uint8_t reg, uint8_t *data, uint8_t le
  * @param data Received data from the BNO055 sensor
  * @return int8_t 
  */
-int8_t bno055_check_ack(uint8_t *data);
+int8_t BNO055_CheckAck(uint8_t *data);
 
 /**
  * @brief Read all data from the BNO055 sensor with I2C (or uart)
@@ -303,7 +303,7 @@ int8_t bno055_check_ack(uint8_t *data);
  * @param bno055
  * @return int8_t 
  */
-int8_t bno055_read_all(bno055_t *bno055);
+int8_t BNO055_ReadAll(BNO055_t *bno055);
 
 /**
  * @brief Read all data from the BNO055 sensor with I2C (or uart) with Lineal Acceleration
@@ -311,7 +311,7 @@ int8_t bno055_read_all(bno055_t *bno055);
  * @param bno055
  * @return int8_t 
  */
-int8_t bno055_read_all_lineal(bno055_t *bno055);
+int8_t BNO055_ReadAll_Lineal(BNO055_t *bno055);
 
 /**
  * @brief Set the unit of the BNO055 sensor
@@ -328,7 +328,7 @@ int8_t bno055_read_all_lineal(bno055_t *bno055);
  * @param unit  Bit value for the unit
  * @return uint8_t 
  */
-int8_t bno055_set_unit(bno055_t *bno055, uint8_t accel_unit, uint8_t gyro_unit, uint8_t euler_unit, uint8_t temp_unit, uint8_t ori_unit);
+int8_t BNO055_SetUnit(BNO055_t *bno055, uint8_t accel_unit, uint8_t gyro_unit, uint8_t euler_unit, uint8_t temp_unit, uint8_t ori_unit);
 
 /**
  * @brief Set the power mode of the BNO055 sensor
@@ -337,13 +337,13 @@ int8_t bno055_set_unit(bno055_t *bno055, uint8_t accel_unit, uint8_t gyro_unit, 
  * @param mode 
  * @return int8_t 
  */
-int8_t bno055_set_power_mode(bno055_t *bno055, bno055_power_mode_t mode);
+int8_t BNO055_SetPowerMode(BNO055_t *bno055, BNO055_PowerMode mode);
 
 /**
  * @brief Coverting the data from the BNO055 sensor to the correct units
  * 
  */
-void bno055_convert_data(bno055_t *bno055);
+void BNO055_ConvertData(BNO055_t *bno055);
 
 /**
  * @brief Get the calibration profile of the BNO055 sensor
@@ -354,6 +354,6 @@ void bno055_convert_data(bno055_t *bno055);
  * @param bno055 Pointer to the BNO055 sensor structure
  * @param calib_data Pointer to the calibration profile structure
  */
-int8_t bno055_get_calibration_profile(bno055_t *bno055, bno055_calib_profile_t *calib_data);
+int8_t BNO055_GetCalibrationProfile(BNO055_t *bno055, BNO055_CalibProfile_t *calib_data);
 
-#endif // BNO055_H
+#endif ///> BNO055_H

@@ -46,7 +46,7 @@ extern raw_sensor_data_t g_sensor_data;
 extern SemaphoreHandle_t g_sensor_data_mutex;
 extern SemaphoreHandle_t g_adc_mutex;
 extern SemaphoreHandle_t g_estimated_data_mutex;
-extern as5600_t g_as5600[3];
+extern AS5600_t g_as5600[3];
 extern velocity_t g_robot_estimated;
 
 // =============================================================================
@@ -203,7 +203,7 @@ void task_read_sensors(void *pvParameters)
     
     // Initialize angular velocity computation state for each encoder
     for (int i = 0; i < 3; i++) {
-        encoder_state[i].last_angle_deg = as5600_adc_get_angle(&g_as5600[i]);
+        encoder_state[i].last_angle_deg = AS5600_ADC_GetAngle(&g_as5600[i]);
         encoder_state[i].last_time_us = now_us;
         kalman_init(&kalman_filters[i], SENSOR_KALMAN_Q, SENSOR_KALMAN_R);
     }
@@ -228,7 +228,7 @@ void task_read_sensors(void *pvParameters)
         
         if (xSemaphoreTake(g_adc_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             for (int i = 0; i < 3; i++) {
-                angle_deg[i] = as5600_adc_get_angle(&g_as5600[i]);
+                angle_deg[i] = AS5600_ADC_GetAngle(&g_as5600[i]);
             }
             xSemaphoreGive(g_adc_mutex);
         } else {
