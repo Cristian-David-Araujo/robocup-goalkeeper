@@ -49,7 +49,7 @@ extern pid_block_handle_t g_pid[3];
 // TASK HANDLE (Optional - for external control)
 // =============================================================================
 
-TaskHandle_t g_task_kinematics_handle = NULL;
+TaskHandle_t g_task_ik_handle = NULL;
 
 // =============================================================================
 // TASK IMPLEMENTATION

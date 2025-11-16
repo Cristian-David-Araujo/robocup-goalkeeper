@@ -131,19 +131,42 @@ int init_pid(void)
 {
     ESP_LOGI(TAG, "Initializing PID controllers...");
     
+    // ==========================================================================
+    // WHEEL SPEED PID CONTROLLERS (Inner Loop)
+    // ==========================================================================
+    
     pid_config_t pid_config = {
         .init_param = g_pid_param
     };
 
-    // Create PID control blocks for each motor
+    // Create PID control blocks for each motor (wheel speeds)
     for (int i = 0; i < 3; i++) {
         int ret = pid_new_control_block(&pid_config, &g_pid[i]);
         if (ret != PID_OK || g_pid[i] == NULL) {
-            ESP_LOGE(TAG, "Failed to create PID controller %d", i);
+            ESP_LOGE(TAG, "Failed to create wheel PID controller %d", i);
             return INIT_ERROR_PID;
         }
     }
     
-    ESP_LOGI(TAG, "PID controllers initialized successfully");
+    ESP_LOGI(TAG, "Wheel PID controllers initialized successfully");
+    
+    // ==========================================================================
+    // ROBOT VELOCITY PID CONTROLLERS (Outer Loop)
+    // ==========================================================================
+    
+    pid_config_t velocity_pid_config = {
+        .init_param = g_velocity_pid_param
+    };
+
+    // Create PID control blocks for robot velocity (vx, vy, wz)
+    for (int i = 0; i < 3; i++) {
+        int ret = pid_new_control_block(&velocity_pid_config, &g_velocity_pid[i]);
+        if (ret != PID_OK || g_velocity_pid[i] == NULL) {
+            ESP_LOGE(TAG, "Failed to create velocity PID controller %d", i);
+            return INIT_ERROR_PID;
+        }
+    }
+    
+    ESP_LOGI(TAG, "Velocity PID controllers initialized successfully");
     return INIT_SUCCESS;
 }

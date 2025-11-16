@@ -50,7 +50,13 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
 ┌──────────────────┐
 │  Trajectory Gen  │  ← Generates desired robot velocity
 └────────┬─────────┘
-         │ (vx, vy, wz)
+         │ (vx_des, vy_des, wz_des)
+         ↓
+┌──────────────────┐
+│ Velocity PID     │  ← Corrects tracking errors (OUTER LOOP)
+│ Control (vx,vy,wz)│
+└────────┬─────────┘
+         │ (vx_cmd, vy_cmd, wz_cmd)
          ↓
 ┌──────────────────┐
 │ Inverse Kinematics│  ← Computes target wheel speeds
@@ -58,7 +64,8 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
          │ (φ̇₁, φ̇₂, φ̇₃)
          ↓
 ┌──────────────────┐
-│   PID Control    │  ← Computes motor commands
+│   Wheel PID      │  ← Controls motor speeds (INNER LOOP)
+│   Control        │
 └────────┬─────────┘
          │ (PWM signals)
          ↓
@@ -73,7 +80,7 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
          │ (measured φ̇)
          ↓
 ┌──────────────────┐
-│ Forward Kinematics│ ← Estimates robot velocity
+│ Forward Kinematics│ ← Estimates robot velocity (feedback)
 └──────────────────┘
 ```
 
@@ -83,39 +90,44 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
 ┌────────────────────────────────────────────────────────────┐
 │                   FreeRTOS Scheduler                       │
 └────────────────────────────────────────────────────────────┘
-         │              │              │              │
-         ↓              ↓              ↓              ↓
-    ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐
-    │ Sensor  │   │  Move   │   │   IK    │   │ Control │
-    │ Task    │   │ Task    │   │  Task   │   │  Task   │
-    │ (P=6)   │   │ (P=4)   │   │ (P=5)   │   │ (P=3)   │
-    └────┬────┘   └────┬────┘   └────┬────┘   └────┬────┘
-         │             │             │             │
-         │             │ Queue       │ Queue       │
-         │   Mutex     ↓             ↓    Mutex    │ Mutex
-         │        ┌────────┐    ┌────────┐         │
-         │        │velocity│    │ wheel  │         │
-         │        │command │    │targets │         │
-         │        └────────┘    └────────┘         │
-         ├──────────────────────┬──────────────────┤
-         ↓                      ↓                  ↓
-    ┌──────────────────────────────────────────────────┐
-    │          Shared Resources (Mutex-Protected)       │
-    │  • sensor_data  • robot_estimated  • pid[]       │
-    └──────────────────────────────────────────────────┘
+         │        │          │          │          │
+         ↓        ↓          ↓          ↓          ↓
+    ┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐
+    │Sensor  ││  IK    ││ Vel    ││ Traj   ││Wheel   │
+    │Task    ││ Task   ││ PID    ││ Task   ││ PID    │
+    │(P=6)   ││ (P=5)  ││ Task   ││ (P=3)  ││ Task   │
+    │        ││        ││ (P=4)  ││        ││ (P=2)  │
+    └───┬────┘└───┬────┘└───┬────┘└───┬────┘└───┬────┘
+        │         │         │         │         │
+        │         │   Queue │   Queue │   Queue │
+        │         │    ↓    │    ↓    │    ↓    │
+        │    ┌────────┐ ┌────────┐ ┌────────┐  │
+        │    │velocity│ │desired │ │ wheel  │  │
+        │    │command │ │velocity│ │targets │  │
+        │    └────────┘ └────────┘ └────────┘  │
+        │         Mutex      Mutex      Mutex   │
+        ├──────────┴──────────┴────────────┴───┤
+        ↓                                       ↓
+   ┌──────────────────────────────────────────────────┐
+   │          Shared Resources (Mutex-Protected)       │
+   │  • sensor_data  • robot_estimated                │
+   │  • pid[] (wheel)  • velocity_pid[] (robot)       │
+   └──────────────────────────────────────────────────┘
 ```
 
 **Communication Patterns:**
-- **Trajectory → IK:** Queue-based (one-way, producer-consumer)
-- **IK → Control:** Queue-based (one-way, decoupled setpoints)
-- **Sensor → Control:** Mutex-protected shared memory (bi-directional read)
-- **Sensor → Trajectory:** Mutex-protected shared memory (for logging)
+- **Trajectory → Velocity PID:** Queue-based (desired velocity commands)
+- **Velocity PID → IK:** Queue-based (corrected velocity commands)
+- **IK → Wheel PID:** Queue-based (wheel speed targets)
+- **Sensor → Velocity PID:** Mutex-protected (measured robot velocity)
+- **Sensor → Wheel PID:** Mutex-protected (measured wheel speeds)
 
 **Design Rationale:**
+- **Cascaded PID control:** Outer loop (velocity) + Inner loop (wheel speeds)
 - Queues for unidirectional data flow (reduces contention)
-- Mutexes only for truly shared resources (ADC, PID array)
+- Mutexes only for truly shared resources (sensor data, PID arrays)
 - Timeout-based acquisition (prevents deadlocks)
-- Task priorities ordered by criticality
+- Task priorities ordered by criticality and execution dependency
 
 ---
 
@@ -254,25 +266,50 @@ firmware/
 **Purpose:** Generates desired robot velocity commands
 
 **Characteristics:**
-- **Priority:** 4 (medium)
+- **Priority:** 3 (medium-low)
 - **Period:** 20 ms
 - **Stack:** 2048 bytes
 
 **Responsibilities:**
 1. Compute desired velocities (currently: circular trajectory)
-2. Send velocity commands to IK task via queue
+2. Send velocity commands to velocity control task via queue
 3. Read estimated velocity for logging (non-critical)
 
 **Communication:**
-- **Outputs:** `g_velocity_command_queue` (2-item queue)
+- **Outputs:** `g_desired_velocity_queue` (2-item queue to Velocity PID task)
 - **Inputs:** `g_robot_estimated` (via mutex, for logging only)
 - **Timeout:** 5ms for queue send, continues on failure
 
-**Rationale:** Queue-based output decouples trajectory generation from IK computation. Non-blocking design prevents starvation.
+**Rationale:** Queue-based output decouples trajectory generation from control. Lowest priority among control tasks since it generates references, not real-time feedback.
 
 ---
 
-### 3. Inverse Kinematics Task (`task_inverse_kinematics`)
+### 3. Velocity Control Task (`task_velocity_control`)
+
+**Purpose:** Outer-loop PID control for robot velocity tracking (NEW - Cascaded Control)
+
+**Characteristics:**
+- **Priority:** 4 (medium)
+- **Period:** 10 ms
+- **Stack:** 4096 bytes
+
+**Responsibilities:**
+1. Receive desired robot velocity from trajectory task
+2. Read measured robot velocity from sensor task (forward kinematics)
+3. Compute PID corrections for tracking errors (vx, vy, wz)
+4. Send corrected velocity commands to IK task
+
+**Communication:**
+- **Inputs:** `g_desired_velocity_queue` (from Trajectory task), `g_robot_estimated` (via mutex)
+- **Outputs:** `g_velocity_command_queue` (to IK task)
+- **Shared:** `g_velocity_pid_mutex` (for velocity PID controllers)
+- **Timeout:** 5ms for queues, 10ms for mutexes
+
+**Rationale:** Outer control loop provides robust tracking despite model uncertainties. Higher priority than trajectory ensures timely corrections. Cascaded architecture allows independent tuning of velocity vs. wheel control.
+
+---
+
+### 4. Inverse Kinematics Task (`task_inverse_kinematics`)
 
 **Purpose:** Converts robot velocity commands to wheel speed targets
 
@@ -282,43 +319,43 @@ firmware/
 - **Stack:** 4096 bytes
 
 **Responsibilities:**
-1. Receive desired robot velocity from queue (non-blocking)
+1. Receive corrected robot velocity from velocity control task
 2. Compute wheel speeds using inverse kinematic equations
-3. Send wheel targets to control task via queue
-4. Update PID controller setpoints (thread-safe)
+3. Send wheel targets to wheel control task via queue
+4. Update wheel PID setpoints (thread-safe)
 
 **Communication:**
-- **Inputs:** `g_velocity_command_queue` (receives from Trajectory task)
-- **Outputs:** `g_wheel_target_queue` (sends to Control task)
-- **Shared:** `g_pid_mutex` (for setpoint updates)
+- **Inputs:** `g_velocity_command_queue` (receives from Velocity Control task)
+- **Outputs:** `g_wheel_target_queue` (sends to Wheel Control task)
+- **Shared:** `g_pid_mutex` (for wheel PID setpoint updates)
 - **Timeout:** 5ms for queue receive, 10ms for PID mutex
 
-**Rationale:** Higher priority than trajectory but lower than sensor ensures proper execution order. Queue-based I/O provides decoupling.
+**Rationale:** Highest priority among control logic tasks ensures kinematic transformation completes before wheel control cycle. Queue-based I/O provides decoupling from velocity control.
 
 ---
 
-### 4. Motor Control Task (`task_control`)
+### 5. Motor Control Task (`task_control`)
 
-**Purpose:** Implements PID feedback control for each motor
+**Purpose:** Inner-loop PID feedback control for individual wheel speeds
 
 **Characteristics:**
-- **Priority:** 3 (medium-low)
+- **Priority:** 2 (low - below sensor feedback path)
 - **Period:** 2 ms
 - **Stack:** 4096 bytes
 
 **Responsibilities:**
 1. Receive target wheel speeds from IK task via queue
 2. Read current encoder velocities from sensor data
-3. Compute PID outputs (error = setpoint - measured)
+3. Compute wheel PID outputs (error = setpoint - measured)
 4. Apply motor commands via PWM
 
 **Communication:**
 - **Inputs:** `g_wheel_target_queue` (receives from IK task), `g_sensor_data` (via mutex)
-- **Shared:** `g_pid_mutex` (for PID computation)
+- **Shared:** `g_pid_mutex` (for wheel PID computation)
 - **Timeout:** 1ms for queue, 5ms for mutexes
 - **Error Handling:** Uses previous values on timeout, logs warnings
 
-**Rationale:** Lower priority acceptable because PID maintains last setpoint. Fast period ensures stable control. Timeout handling provides robustness.
+**Rationale:** Lower priority acceptable because inner-loop PID maintains last setpoint. Fast period (2ms) ensures stable control. Cascaded architecture allows this task to focus solely on wheel speed regulation.
 
 ---
 
@@ -342,11 +379,13 @@ This system uses a **hybrid communication model** combining FreeRTOS queues and 
 
 | Primitive | Type | Purpose | Users | Timeout |
 |-----------|------|---------|-------|---------|
-| `g_velocity_command_queue` | Queue (size=2) | Velocity commands | Trajectory→IK | 5ms |
-| `g_wheel_target_queue` | Queue (size=2) | Wheel targets | IK→Control | 1ms |
-| `g_sensor_data_mutex` | Mutex | Sensor readings | Sensor(W), Control(R) | 5ms |
-| `g_estimated_data_mutex` | Mutex | Robot velocity estimate | Sensor(W), Trajectory(R) | 5ms |
-| `g_pid_mutex` | Mutex | PID controller array | IK(W), Control(R) | 5-10ms |
+| `g_desired_velocity_queue` | Queue (size=2) | Desired velocity | Trajectory→VelPID | 5ms |
+| `g_velocity_command_queue` | Queue (size=2) | Corrected velocity | VelPID→IK | 5ms |
+| `g_wheel_target_queue` | Queue (size=2) | Wheel targets | IK→WheelPID | 1ms |
+| `g_sensor_data_mutex` | Mutex | Sensor readings | Sensor(W), WheelPID(R) | 5ms |
+| `g_estimated_data_mutex` | Mutex | Robot velocity estimate | Sensor(W), VelPID(R) | 5ms |
+| `g_pid_mutex` | Mutex | Wheel PID array | IK(W), WheelPID(R) | 5-10ms |
+| `g_velocity_pid_mutex` | Mutex | Velocity PID array | VelPID(RW) | 10ms |
 | `g_adc_mutex` | Mutex | Shared ADC hardware | Sensor task only | 10ms |
 
 ### Data Flow Diagram
@@ -356,29 +395,53 @@ This system uses a **hybrid communication model** combining FreeRTOS queues and 
 │  Trajectory  │
 │    Task      │
 └──────┬───────┘
-       │ velocity_t via QUEUE
+       │ desired velocity_t via QUEUE
        ↓
 ┌──────────────┐
-│   IK Task    │
-└──────┬───────┘
+│  Velocity    │◄────────┐
+│  PID Task    │         │ measured velocity via MUTEX
+└──────┬───────┘         │
+       │ corrected velocity_t via QUEUE
+       ↓                 │
+┌──────────────┐         │
+│   IK Task    │         │
+└──────┬───────┘         │
        │ wheel_speeds_t via QUEUE
-       │
+       │                 │
        ↓              ┌──────────────┐
 ┌──────────────┐     │   Sensor     │
-│   Control    │◄────┤    Task      │ sensor_data via MUTEX
+│  Wheel PID   │◄────┤    Task      │ wheel speeds via MUTEX
 │    Task      │     └──────────────┘
 └──────┬───────┘            │
        │                    │ estimated velocity via MUTEX
-       │                    ↓
+       │                    ↑
        │             ┌──────────────┐
        └────────────►│  Trajectory  │ (for logging)
-         PID mutex   │    Task      │
-                     └──────────────┘
+         wheel PID    │    Task      │
+         mutex        └──────────────┘
 ```
 
 ### Design Decisions and Rationale
 
-**1. Why Queues for Trajectory→IK and IK→Control?**
+**1. Why Cascaded PID Control Architecture?**
+
+**Decision:** Implement two-layer PID control (outer: robot velocity, inner: wheel speeds)
+
+**Rationale:**
+- **Improved tracking:** Outer loop compensates for model uncertainties, disturbances, and kinematic errors
+- **Modular tuning:** Velocity and wheel controllers can be tuned independently
+- **Robustness:** System maintains performance even if kinematic model is imperfect
+- **Real-world applicability:** Standard approach in mobile robotics for robust control
+- **Error correction:** Feedback from sensors closes the loop at robot velocity level
+
+**Implementation:**
+- Outer loop (10ms): velocity_t (vx, vy, wz) → PID correction → IK task
+- Inner loop (2ms): wheel_speeds_t (φ̇₁, φ̇₂, φ̇₃) → PID control → motors
+- Independent parameter tuning via `config_utils.h`
+
+---
+
+**2. Why Queues for Trajectory→Velocity PID and Velocity PID→IK?**
 
 **Decision:** Use FreeRTOS queues instead of mutex-protected globals
 
@@ -393,19 +456,19 @@ This system uses a **hybrid communication model** combining FreeRTOS queues and 
 
 ---
 
-**2. Why Mutexes for Sensor Data and PID Array?**
+**3. Why Mutexes for Sensor Data and PID Arrays?**
 
-**Decision:** Continue using mutexes for `g_sensor_data`, `g_pid[]`, and `g_robot_estimated`
+**Decision:** Continue using mutexes for `g_sensor_data`, `g_pid[]`, `g_velocity_pid[]`, and `g_robot_estimated`
 
 **Rationale:**
-- **Multiple readers:** Control task needs sensor data; trajectory task needs estimates
+- **Multiple readers:** Control task needs sensor data; velocity control needs estimates
 - **State representation:** Not message-passing, but shared system state
 - **Atomic updates:** Sensor data has multiple fields that must be updated together
 - **Small critical sections:** Quick copy operations, low hold time
 
 ---
 
-**3. Why Timeout-Based Mutex Acquisition?**
+**4. Why Timeout-Based Mutex Acquisition?**
 
 **Decision:** Replace `portMAX_DELAY` with timeouts (5-10ms)
 
@@ -428,19 +491,21 @@ if (xSemaphoreTake(mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
 
 ---
 
-**4. Task Priority Assignment**
+**5. Task Priority Assignment**
 
 **Decision:**
 - Sensor Task: 6 (highest)
 - IK Task: 5
-- Trajectory Task: 4
-- Control Task: 3
+- Velocity PID Task: 4
+- Trajectory Task: 3
+- Wheel PID Task: 2
 
 **Rationale:**
 - **Sensor (6):** Must sample encoders at precise intervals for accurate velocity estimation
-- **IK (5):** Must process commands before control loop to update setpoints
-- **Trajectory (4):** Can tolerate jitter; generates commands at lower rate (20ms)
-- **Control (3):** Runs fast (2ms) but can be preempted; maintains last setpoint if delayed
+- **IK (5):** Must process velocity commands before control loop to update setpoints
+- **Velocity PID (4):** Outer control loop must execute before inner loop
+- **Trajectory (3):** Can tolerate jitter; generates commands at lower rate (20ms)
+- **Wheel PID (2):** Runs fast (2ms) but can be preempted; maintains last setpoint if delayed
 
 **Validation:** No priority inversion observed; task watermarks show sufficient stack
 
@@ -620,10 +685,17 @@ All configuration constants are centralized in `utils/config_utils.h`:
 
 #### PID Tuning
 ```c
+// Wheel Speed PID (Inner Loop)
 #define PID_MOTOR_KP 0.1f            // Proportional gain
 #define PID_MOTOR_KI 0.006f          // Integral gain
 #define PID_MOTOR_KD 0.0f            // Derivative gain
 #define PID_MOTOR_MAX_OUTPUT 80.0f   // Output limit
+
+// Robot Velocity PID (Outer Loop)
+#define PID_VELOCITY_KP 1.0f         // Proportional gain
+#define PID_VELOCITY_KI 0.1f         // Integral gain
+#define PID_VELOCITY_KD 0.05f        // Derivative gain
+#define PID_VELOCITY_MAX_OUTPUT 1.0f // Output limit (m/s or rad/s)
 ```
 
 #### Task Timing

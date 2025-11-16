@@ -58,6 +58,12 @@ extern pid_block_handle_t g_pid[3];
 /// @brief PID controller parameters (shared configuration)
 extern pid_parameter_t g_pid_param;
 
+/// @brief Array of velocity PID controller handles (vx, vy, wz)
+extern pid_block_handle_t g_velocity_pid[3];
+
+/// @brief Velocity PID controller parameters
+extern pid_parameter_t g_velocity_pid_param;
+
 /// @brief Shared ADC handle for encoder analog reading
 extern adc_oneshot_unit_handle_t g_shared_adc_handle;
 
@@ -98,8 +104,11 @@ int init_motors(void);
 /**
  * @brief Initialize PID controllers
  *
- * Creates and configures PID control blocks for each motor using
- * parameters defined in g_pid_param.
+ * Creates and configures PID control blocks for:
+ * - Wheel speed control (3 controllers for individual motors)
+ * - Robot velocity control (3 controllers for vx, vy, wz)
+ *
+ * Uses parameters defined in g_pid_param and g_velocity_pid_param.
  *
  * @return int Status code
  *         - INIT_SUCCESS on successful initialization

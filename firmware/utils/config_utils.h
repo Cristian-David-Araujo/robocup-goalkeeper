@@ -60,12 +60,27 @@ extern "C" {
 // PID CONTROLLER TUNING PARAMETERS
 // =============================================================================
 
+// -----------------------------------------------------------------------------
+// WHEEL SPEED PID (Inner Loop) - Controls individual wheel velocities
+// -----------------------------------------------------------------------------
+
 #define PID_MOTOR_KP 0.1f                  ///< Proportional gain
 #define PID_MOTOR_KI 0.006f                ///< Integral gain
 #define PID_MOTOR_KD 0.0f                  ///< Derivative gain
 #define PID_MOTOR_BETA 0.0f                ///< Beta filter coefficient for derivative term
 #define PID_MOTOR_MAX_OUTPUT 80.0f         ///< Maximum PID output (% motor speed)
 #define PID_MOTOR_MIN_OUTPUT -80.0f        ///< Minimum PID output (% motor speed)
+
+// -----------------------------------------------------------------------------
+// ROBOT VELOCITY PID (Outer Loop) - Controls robot vx, vy, wz
+// -----------------------------------------------------------------------------
+
+#define PID_VELOCITY_KP 1.0f               ///< Proportional gain for velocity control
+#define PID_VELOCITY_KI 0.1f               ///< Integral gain for velocity control
+#define PID_VELOCITY_KD 0.05f              ///< Derivative gain for velocity control
+#define PID_VELOCITY_BETA 0.1f             ///< Beta filter coefficient for derivative term
+#define PID_VELOCITY_MAX_OUTPUT 1.0f       ///< Maximum velocity output (m/s or rad/s)
+#define PID_VELOCITY_MIN_OUTPUT -1.0f      ///< Minimum velocity output (m/s or rad/s)
 
 // =============================================================================
 // SENSOR TASK CONFIGURATION
@@ -88,8 +103,11 @@ extern "C" {
 // CONTROL LOOP CONFIGURATION
 // =============================================================================
 
-#define CONTROL_TASK_PERIOD_MS 2           ///< Control loop period (ms)
+#define CONTROL_TASK_PERIOD_MS 2           ///< Wheel PID control loop period (ms)
 #define CONTROL_TASK_SAMPLE_RATE_HZ (1000.0f / CONTROL_TASK_PERIOD_MS)  ///< Sample rate (Hz)
+
+#define VELOCITY_CONTROL_TASK_PERIOD_MS 10 ///< Velocity PID control loop period (ms)
+#define VELOCITY_CONTROL_SAMPLE_RATE_HZ (1000.0f / VELOCITY_CONTROL_TASK_PERIOD_MS)  ///< Sample rate (Hz)
 
 // =============================================================================
 // KINEMATICS TASK CONFIGURATION
