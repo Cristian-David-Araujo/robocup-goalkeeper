@@ -64,7 +64,7 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
          │ (φ̇₁, φ̇₂, φ̇₃)
          ↓
 ┌──────────────────┐
-│   Wheel PID      │  ← Controls motor speeds (INNER LOOP)
+│   Motor PID      │  ← Controls motor speeds (INNER LOOP)
 │   Control        │
 └────────┬─────────┘
          │ (PWM signals)
@@ -93,7 +93,7 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
          │        │          │          │          │
          ↓        ↓          ↓          ↓          ↓
     ┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐
-    │Sensor  ││  IK    ││ Vel    ││ Traj   ││Wheel   │
+    │Sensor  ││  IK    ││ Vel    ││ Traj   ││ Motor  │
     │Task    ││ Task   ││ PID    ││ Task   ││ PID    │
     │(P=6)   ││ (P=5)  ││ Task   ││ (P=3)  ││ Task   │
     │        ││        ││ (P=4)  ││        ││ (P=2)  │
@@ -118,9 +118,9 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
 **Communication Patterns:**
 - **Trajectory → Velocity PID:** Queue-based (desired velocity commands)
 - **Velocity PID → IK:** Queue-based (corrected velocity commands)
-- **IK → Wheel PID:** Queue-based (wheel speed targets)
+- **IK → Motor PID:** Queue-based (wheel speed targets)
 - **Sensor → Velocity PID:** Mutex-protected (measured robot velocity)
-- **Sensor → Wheel PID:** Mutex-protected (measured wheel speeds)
+- **Sensor → Motor PID:** Mutex-protected (measured wheel speeds)
 
 **Design Rationale:**
 - **Cascaded PID control:** Outer loop (velocity) + Inner loop (wheel speeds)
@@ -176,19 +176,22 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
 ```
 firmware/
 ├── main/
-│   ├── main.c              # Application entry point
+│   ├── main.c              # Application entry point & global definitions
+│   ├── main.h              # Global variable declarations
 │   ├── init.c              # Hardware initialization
 │   └── init.h              # Initialization interface
 ├── tasks/
-│   ├── task_read_sensors.c      # Sensor reading + filtering
-│   ├── task_control.c           # Motor PID control
-│   └── task_inverse_kinematics.c # IK computation
+│   ├── task_read_sensors.c           # Sensor reading + filtering
+│   ├── task_motor_control.c          # Motor PID control (inner loop)
+│   ├── task_inverse_kinematics.c     # IK computation
+│   ├── task_velocity_control.c       # Velocity PID (outer loop)
+│   └── task_move_trajectory.c        # Trajectory generation
 ├── src/
 │   ├── motor.c             # Motor driver implementation
 │   ├── pid.c               # PID controller implementation
 │   ├── kinematics.c        # Forward/inverse kinematics
 │   ├── as5600.c            # Encoder driver
-│   └── bno055.c            # IMU driver
+│   └── bno055.c            # IMU driver (unused)
 ├── include/
 │   ├── motor.h             # Motor driver interface
 │   ├── pid.h               # PID controller interface
@@ -334,7 +337,7 @@ firmware/
 
 ---
 
-### 5. Motor Control Task (`task_control`)
+### 5. Motor Control Task (`task_motor_control`)
 
 **Purpose:** Inner-loop PID feedback control for individual wheel speeds
 
@@ -346,12 +349,12 @@ firmware/
 **Responsibilities:**
 1. Receive target wheel speeds from IK task via queue
 2. Read current encoder velocities from sensor data
-3. Compute wheel PID outputs (error = setpoint - measured)
+3. Compute motor PID outputs (error = setpoint - measured)
 4. Apply motor commands via PWM
 
 **Communication:**
 - **Inputs:** `g_wheel_target_queue` (receives from IK task), `g_sensor_data` (via mutex)
-- **Shared:** `g_pid_mutex` (for wheel PID computation)
+- **Shared:** `g_pid_mutex` (for motor PID computation)
 - **Timeout:** 1ms for queue, 5ms for mutexes
 - **Error Handling:** Uses previous values on timeout, logs warnings
 
@@ -381,10 +384,10 @@ This system uses a **hybrid communication model** combining FreeRTOS queues and 
 |-----------|------|---------|-------|---------|
 | `g_desired_velocity_queue` | Queue (size=2) | Desired velocity | Trajectory→VelPID | 5ms |
 | `g_velocity_command_queue` | Queue (size=2) | Corrected velocity | VelPID→IK | 5ms |
-| `g_wheel_target_queue` | Queue (size=2) | Wheel targets | IK→WheelPID | 1ms |
-| `g_sensor_data_mutex` | Mutex | Sensor readings | Sensor(W), WheelPID(R) | 5ms |
+| `g_wheel_target_queue` | Queue (size=2) | Wheel targets | IK→MotorPID | 1ms |
+| `g_sensor_data_mutex` | Mutex | Sensor readings | Sensor(W), MotorPID(R) | 5ms |
 | `g_estimated_data_mutex` | Mutex | Robot velocity estimate | Sensor(W), VelPID(R) | 5ms |
-| `g_pid_mutex` | Mutex | Wheel PID array | IK(W), WheelPID(R) | 5-10ms |
+| `g_pid_mutex` | Mutex | Motor PID array | IK(W), MotorPID(R) | 5-10ms |
 | `g_velocity_pid_mutex` | Mutex | Velocity PID array | VelPID(RW) | 10ms |
 | `g_adc_mutex` | Mutex | Shared ADC hardware | Sensor task only | 10ms |
 
@@ -410,14 +413,14 @@ This system uses a **hybrid communication model** combining FreeRTOS queues and 
        │                 │
        ↓              ┌──────────────┐
 ┌──────────────┐     │   Sensor     │
-│  Wheel PID   │◄────┤    Task      │ wheel speeds via MUTEX
+│  Motor PID   │◄────┤    Task      │ wheel speeds via MUTEX
 │    Task      │     └──────────────┘
 └──────┬───────┘            │
        │                    │ estimated velocity via MUTEX
        │                    ↑
        │             ┌──────────────┐
        └────────────►│  Trajectory  │ (for logging)
-         wheel PID    │    Task      │
+         motor PID    │    Task      │
          mutex        └──────────────┘
 ```
 
@@ -498,14 +501,14 @@ if (xSemaphoreTake(mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
 - IK Task: 5
 - Velocity PID Task: 4
 - Trajectory Task: 3
-- Wheel PID Task: 2
+- Motor PID Task: 2
 
 **Rationale:**
 - **Sensor (6):** Must sample encoders at precise intervals for accurate velocity estimation
 - **IK (5):** Must process velocity commands before control loop to update setpoints
 - **Velocity PID (4):** Outer control loop must execute before inner loop
 - **Trajectory (3):** Can tolerate jitter; generates commands at lower rate (20ms)
-- **Wheel PID (2):** Runs fast (2ms) but can be preempted; maintains last setpoint if delayed
+- **Motor PID (2):** Runs fast (2ms) but can be preempted; maintains last setpoint if delayed
 
 **Validation:** No priority inversion observed; task watermarks show sufficient stack
 
