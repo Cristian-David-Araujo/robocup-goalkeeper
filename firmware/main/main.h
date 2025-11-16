@@ -41,7 +41,7 @@ extern motor_brushless_t g_motor[3];
 extern as5600_t g_as5600[3];
 
 /// @brief BNO055 IMU sensor instance (currently unused)
-extern BNO055_t g_bno055;
+extern bno055_t g_bno055;
 
 /// @brief Shared ADC handle for encoder analog reading
 extern adc_oneshot_unit_handle_t g_shared_adc_handle;
