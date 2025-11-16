@@ -28,7 +28,7 @@ extern "C" {
 // =============================================================================
 
 #define ROBOT_NAME "RoboCupGoalkeeper"     ///< Robot name identifier
-#define ROBOT_VERSION "1.0"                ///< Firmware version string
+#define ROBOT_VERSION "2.0"                ///< Firmware version string
 
 // =============================================================================
 // ROBOT PHYSICAL DIMENSIONS (meters and radians)

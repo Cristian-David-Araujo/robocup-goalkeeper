@@ -1,5 +1,5 @@
 /**
- * @file task_control.c
+ * @file task_motor_control.c
  * @brief Motor control task with PID feedback loops
  * 
  * This task implements closed-loop motor speed control using PID controllers.
@@ -85,7 +85,7 @@ static volatile int uart_buffer_index = 0;
  * 
  * @param pvParameters Unused task parameter
  */
-void task_control(void *pvParameters) 
+void task_motor_control(void *pvParameters) 
 {
     ESP_LOGI(TAG, "Motor control task started");
     

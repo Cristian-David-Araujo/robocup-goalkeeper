@@ -103,7 +103,7 @@ TaskHandle_t g_handle_parser_task = NULL;
 // =============================================================================
 
 void task_read_sensors(void *pvParameters);
-void task_control(void *pvParameters);
+void task_motor_control(void *pvParameters);
 void task_inverse_kinematics(void *pvParameters);
 void task_velocity_control(void *pvParameters);
 void task_move_trajectory(void *pvParameters);
@@ -281,18 +281,18 @@ void app_main(void)
     
     // Motor control task (2) - inner PID loop
     xReturned = xTaskCreate(
-        task_control,
-        "ControlTask",
+        task_motor_control,
+        "MotorCtrlTask",
         4096,
         NULL,
         2,
         &g_task_control_handle
     );
     if (xReturned != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create control task");
+        ESP_LOGE(TAG, "Failed to create motor control task");
         return;
     }
-    ESP_LOGI(TAG, "  ✓ Control task created (priority 2)");
+    ESP_LOGI(TAG, "  ✓ Motor control task created (priority 2)");
     
     ESP_LOGI(TAG, "==============================================");
     ESP_LOGI(TAG, "All tasks created successfully");
