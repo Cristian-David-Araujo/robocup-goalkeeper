@@ -31,7 +31,7 @@ typedef enum
     AS5600_REG_MAGNITUDE_H = 0x1B,     /*!< Magnitude */
     AS5600_REG_MAGNITUDE_L = 0x1C,     /*!< Magnitude */
     AS5600_REG_BURN = 0xFF     /*!< Burn */
-} AS5600_reg_t;
+} as5600_reg_t;
 
 
 /**
@@ -44,7 +44,7 @@ typedef enum
     AS5600_POWER_MODE_LPM1 = 0x01,   /*!< Low power mode 1 */
     AS5600_POWER_MODE_LPM2 = 0x02,   /*!< Low power mode 2 */
     AS5600_POWER_MODE_LPM3 = 0x03,   /*!< Low power mode 3 */
-} AS5600_power_mode_t;
+} as5600_power_mode_t;
 
 /**
  * @brief PWM frequency for PW bitfield at the CONF register
@@ -55,7 +55,7 @@ typedef enum
     AS5600_HYSTERESIS_1LSB = 0x01,  /*!< Hysteresis 1LSB */
     AS5600_HYSTERESIS_2LSB = 0x02,  /*!< Hysteresis 2LSB */
     AS5600_HYSTERESIS_3LSB = 0x03,  /*!< Hysteresis 3LSB */
-} AS5600_hysteresis_t;
+} as5600_hysteresis_t;
 
 /**
  * @brief Output stage types for OUTS bitfield at the CONF register
@@ -65,7 +65,7 @@ typedef enum
     AS5600_OUTPUT_STAGE_ANALOG_FR = 0x00, ///< Analog output 0%-100%, FULL RANGE
     AS5600_OUTPUT_STAGE_ANALOG_RR = 0x01, ///< Analog output 10%-90%, REDUCED RANGE
     AS5600_OUTPUT_STAGE_DIGITAL_PWM = 0x02, ///< PWM output
-} AS5600_output_stage_t;
+} as5600_output_stage_t;
 
 /**
  * @brief Allowed PWM output frequencies at the PWMF bitfield at the CONF register
@@ -76,7 +76,7 @@ typedef enum
     AS5600_PWM_FREQUENCY_230HZ = 0x01, ///< 230Hz
     AS5600_PWM_FREQUENCY_460HZ = 0x02, ///< 460Hz
     AS5600_PWM_FREQUENCY_920HZ = 0x03, ///< 920Hz
-} AS5600_pwm_frequency_t;
+} as5600_pwm_frequency_t;
 
 /**
  * @brief Slow filter step response delays for SF bitfield at CONF register.
@@ -87,7 +87,7 @@ typedef enum
     AS5600_SLOW_FILTER_8X = 0x01,   ///< 8x
     AS5600_SLOW_FILTER_4X = 0x02,   ///< 4x
     AS5600_SLOW_FILTER_2X = 0x03,   ///< 2x
-} AS5600_slow_filter_t;
+} as5600_slow_filter_t;
 
 /**
  * @brief Fast filter threshold options for FF bitfield at CONF register.
@@ -108,7 +108,7 @@ typedef enum
     AS5600_FF_THRESHOLD_21LSB = 0x05, ///< 21LSB
     AS5600_FF_THRESHOLD_24LSB = 0x06, ///< 24LSB
     AS5600_FF_THRESHOLD_10LSB = 0x07, ///< 10LSB
-} AS5600_ff_threshold_t;
+} as5600_ff_threshold_t;
 
 /**
  * @brief BURN register commands
@@ -117,7 +117,7 @@ typedef enum
 {
     AS5600_BURN_MODE_BURN_SETTING = 0x40U, ///< Command for burning a setting configuration
     AS5600_BURN_MODE_BURN_ANGLE = 0x80U, ///< Command for burning start and end angles
-} AS5600_burn_mode_t;
+} as5600_burn_mode_t;
 
 /**
  * @brief Watchdog options for WD bitfield at CONF register
@@ -126,7 +126,7 @@ typedef enum
 {
     AS5600_WATCHDOG_OFF = 0x00, ///< Watchdog off
     AS5600_WATCHDOG_ON = 0x01, ///< Watchdog on
-} AS5600_watchdog_t;
+} as5600_watchdog_t;
 
 /**
  * @brief Configuration bitfield for the CONF register
@@ -135,16 +135,16 @@ typedef union
 {
     uint16_t WORD;
 	struct{
-		AS5600_power_mode_t     PM     :2; ///< Power mode: 00 - NOM, 01 - LPM1, 10 - LPM2, 11 - LPM3
-        AS5600_hysteresis_t     HYST   :2; ///< Hysteresis: 00 - OFF, 01 - 1LSB, 10 - 2LSB, 11 - 3LSB
-        AS5600_output_stage_t   OUTS   :2; ///< Output stage: 00 - analog(0%-100%), 01 - analog(10%-90%), 10 - PWM 
-        AS5600_pwm_frequency_t  PWMF   :2; ///< PWM frequency: 00 - 115Hz, 01 - 230Hz, 10 - 460Hz, 11 - 920Hz
-        AS5600_slow_filter_t    SF     :2; ///< Slow filter: 00 - 16x, 01 - 8x, 10 - 4x, 11 - 2x
-        AS5600_ff_threshold_t   FTH    :3; ///< FASt filter threshold
-        AS5600_watchdog_t       WD     :1; ///< Watchdog: 0 - disabled, 1 - enabled
+		as5600_power_mode_t     PM     :2; ///< Power mode: 00 - NOM, 01 - LPM1, 10 - LPM2, 11 - LPM3
+        as5600_hysteresis_t     HYST   :2; ///< Hysteresis: 00 - OFF, 01 - 1LSB, 10 - 2LSB, 11 - 3LSB
+        as5600_output_stage_t   OUTS   :2; ///< Output stage: 00 - analog(0%-100%), 01 - analog(10%-90%), 10 - PWM 
+        as5600_pwm_frequency_t  PWMF   :2; ///< PWM frequency: 00 - 115Hz, 01 - 230Hz, 10 - 460Hz, 11 - 920Hz
+        as5600_slow_filter_t    SF     :2; ///< Slow filter: 00 - 16x, 01 - 8x, 10 - 4x, 11 - 2x
+        as5600_ff_threshold_t   FTH    :3; ///< FASt filter threshold
+        as5600_watchdog_t       WD     :1; ///< Watchdog: 0 - disabled, 1 - enabled
 		uint16_t                       :2;
 	};
-} AS5600_config_t;
+} as5600_config_t;
 
 ///< BITFIELD CONTANT VALUES
 #define kAS5600_CONF_PM_NOM      0x00

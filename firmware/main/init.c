@@ -35,7 +35,7 @@ int init_sensors(void)
 
     // Initialize each AS5600 encoder with shared ADC
     for (int i = 0; i < 3; i++) {
-        AS5600_InitADC_2(&g_as5600[i], g_shared_adc_handle);
+        as5600_init_adc_shared(&g_as5600[i], g_shared_adc_handle);
     }
     
     ESP_LOGI(TAG, "AS5600 encoders initialized successfully");
@@ -45,12 +45,12 @@ int init_sensors(void)
     // ==========================================================================
     
     /*
-    int status = BNO055_Init(&g_bno055, GPIO_IMU_I2C_SDA, GPIO_IMU_I2C_SCL, BNO055_I2C_MASTER_NUM);
+    int status = bno055_init(&g_bno055, GPIO_IMU_I2C_SDA, GPIO_IMU_I2C_SCL, BNO055_I2C_MASTER_NUM);
     while (status != BNO055_SUCCESS) {
         ESP_LOGE(TAG, "Failed to initialize BNO055 sensor, retrying...");
-        BNO055_Reset(&g_bno055);
+        bno055_reset(&g_bno055);
         vTaskDelay(pdMS_TO_TICKS(1000));
-        status = BNO055_Init(&g_bno055, GPIO_IMU_I2C_SDA, GPIO_IMU_I2C_SCL, BNO055_I2C_MASTER_NUM);
+        status = bno055_init(&g_bno055, GPIO_IMU_I2C_SDA, GPIO_IMU_I2C_SCL, BNO055_I2C_MASTER_NUM);
     }
     ESP_LOGI(TAG, "BNO055 IMU initialized successfully");
     */

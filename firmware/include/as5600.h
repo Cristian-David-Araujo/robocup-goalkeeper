@@ -1,24 +1,31 @@
 /**
- * \file        as5600.h
- * \brief       AS5600 library
- * \details
+ * @file as5600.h
+ * @brief AS5600 12-bit magnetic rotary position sensor driver interface
  * 
- *          About the OUT pin in the AS5600 sensor:
- * The ADC of the ESP32 is connected to the OUT pin of the AS5600 sensor.
- * The OUT pin can be configured to output a 10%-90% (VCC) analog signal.
- * Since the ESP32 ADC can only read 0-3.3V, the VCC of the AS5600 sensor must be 3.3V.
- * But there is another problem. The characteristic graft of the ADC (Voltage vs. Digital Value) is not linear on all
- * the range (0-3.3V). It is linear only on the 5%-90% range, aproximately.
- * That is why the OUT pin must be configured to output a 10%-90% signal.
+ * This module provides functions to initialize and control the AS5600 contactless
+ * magnetic angle sensor using I2C communication and optional analog output via ADC.
  * 
- * \author      MaverickST
- * \version     0.0.4
- * \date        05/10/2024
- * \copyright   Unlicensed
+ * Features:
+ * - 12-bit angular resolution (0.088° per LSB)
+ * - I2C digital interface
+ * - Analog output with reduced range (10%-90% VCC)
+ * - Programmable zero position and maximum angle
+ * - Non-volatile memory for configuration
+ * 
+ * ADC Analog Output Notes:
+ * The ESP32 ADC has best linearity in the 5%-90% range. The AS5600 OUT pin is
+ * configured for 10%-90% range to stay within this linear region when using 3.3V VCC.
+ * 
+ * Thread-safety: Functions are NOT thread-safe. External synchronization required.
+ * 
+ * @author MaverickST
+ * @version 0.2
+ * @date 2024-11-25
+ * @copyright Unlicensed
  */
 
-#ifndef __AS5600_H__
-#define __AS5600_H__
+#ifndef AS5600_H
+#define AS5600_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -29,273 +36,352 @@
 #include "as5600_defs.h"
 #include "platform_esp32s3.h"
 
-#define VCC_3V3_MV          3300        /*!< VCC in mV */
-#define VCC_3V3_MIN_RR_MV   330         /*!< VCC minimum range in mV -> 10% of VCC */
-#define VCC_3V3_MAX_RR_MV   2970        /*!< VCC maximum range in mV -> 90% of VCC */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#define MAP(val, in_min, in_max, out_min, out_max) ((val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min) /*!< Map function */
-#define ADC_TO_VOLTAGE(val) MAP(val, 0, AS5600_ADC_RESOLUTION_12_BIT, 0, VCC_3V3_MV) /*!< ADC to voltage conversion */
-#define LIMIT(a, min, max) (a < min ? min : (a > max ? max : a)) /*!< Limit a value between min and max */
+// =============================================================================
+// CONFIGURATION CONSTANTS
+// =============================================================================
 
-#define I2C_MASTER_FREQ_HZ  400*1000    /*!< I2C master clock frequency */
-#define AS5600_SENSOR_ADDR  0x36        /*!< slave address for AS5600 sensor */
+#define AS5600_VCC_3V3_MV           (3300)      ///< VCC voltage in millivolts
+#define AS5600_VCC_3V3_MIN_RR_MV    (330)       ///< Min analog output (10% VCC)
+#define AS5600_VCC_3V3_MAX_RR_MV    (2970)      ///< Max analog output (90% VCC)
+#define AS5600_I2C_FREQ_HZ          (400 * 1000)  ///< I2C clock frequency: 400 kHz
+#define AS5600_SENSOR_ADDR          (0x36)      ///< Default I2C slave address
 
-typedef struct
-{
-    AS5600_config_t conf; ///< AS5600 configuration
-    AS5600_reg_t reg;
-    uint8_t out;         ///< GPIO pin connected to the OUT pin of the AS5600 sensor
+// =============================================================================
+// UTILITY MACROS
+// =============================================================================
 
+/// @brief Map value from input range to output range
+#define AS5600_MAP(val, in_min, in_max, out_min, out_max) \
+    ((val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)
+
+/// @brief Clamp value between min and max
+#define AS5600_LIMIT(a, min, max) ((a) < (min) ? (min) : ((a) > (max) ? (max) : (a)))
+
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
+
+/**
+ * @brief AS5600 sensor instance structure
+ * 
+ * Contains hardware configuration and peripheral handles for a single AS5600 sensor.
+ * Must be initialized with as5600_init() before use.
+ * 
+ * Thread-safety: Not thread-safe. Do not access from multiple tasks concurrently.
+ */
+typedef struct {
+    as5600_config_t conf;   ///< Sensor configuration register value
+    as5600_reg_t reg;       ///< Last accessed register (internal use)
+    uint8_t out;            ///< GPIO pin for analog OUT signal
+    
     // Peripheral handles
-    i2c_t i2c_handle;   ///< I2C handle for the AS5600 sensor
-    adc_t adc_handle;   ///< ADC handle for the OUT pin
-    gpio_t gpio_handle; ///< GPIO handle for the OUT pin
+    i2c_t i2c_handle;       ///< I2C communication handle
+    adc_t adc_handle;       ///< ADC handle for analog reading
+    gpio_t gpio_handle;     ///< GPIO handle (for OUT pin control if needed)
+} as5600_t;
 
-} AS5600_t;
-
-/**
- * @brief Initialize the I2C master driver
- * 
- * @param i2c_num I2C port number
- */
-void AS5600_Init(AS5600_t *as5600, i2c_port_t i2c_num, uint8_t scl, uint8_t sda, uint8_t out);
+// =============================================================================
+// PUBLIC API FUNCTIONS
+// =============================================================================
 
 /**
- * @brief Deinitialize the I2C master driver
+ * @brief Initialize AS5600 sensor
  * 
+ * Configures I2C communication for the sensor. Stores GPIO pin for analog output.
+ * Does NOT initialize ADC or GPIO - use as5600_init_adc() or as5600_init_adc_shared()
+ * separately if analog reading is needed.
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance structure
+ * @param[in] i2c_num I2C port number
+ * @param[in] scl GPIO pin for I2C SCL
+ * @param[in] sda GPIO pin for I2C SDA
+ * @param[in] out GPIO pin for analog OUT signal (for ADC reading)
+ * 
+ * @note Must be called before any other AS5600 functions
  */
-void AS5600_Deinit(AS5600_t *as5600);
+void as5600_init(as5600_t *as5600, i2c_port_t i2c_num, uint8_t scl, uint8_t sda, uint8_t out);
 
 /**
- * @brief Get angle in degrees from the AS5600 sensor by ADC.
- * Also take into account the range of the OUT pin of the AS5600 sensor, which is 10%-90% of VCC.
+ * @brief Deinitialize AS5600 sensor
  * 
- * @param as5600 
+ * Releases I2C, ADC, and GPIO resources.
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance
  */
-float AS5600_ADC_GetAngle(AS5600_t *as5600);
+void as5600_deinit(as5600_t *as5600);
 
 /**
- * @brief The host microcontroller can perform a permanent programming of ZPOS and MPOS with a BURN_ANGLE command.
- * To perform a BURN_ANGLE command, write the value 0x80 into register 0xFF. 
- * The BURN_ANGLE command can be executed up to 3 times
- * ZMCO shows how many times ZPOS and MPOS have been permanently written. 
- * This command may only be executed if the presence of the magnet is detected (MD = 1).
+ * @brief Get angle in degrees from analog output via ADC
  * 
- * @param as5600 
+ * Reads the analog OUT pin voltage via ADC and maps it to 0-360 degrees.
+ * Requires ADC to be calibrated and output configured for analog reduced range.
+ * 
+ * @param[in] as5600 Pointer to AS5600 instance
+ * @return Angle in degrees [0-360], or -1 on error
+ * 
+ * @note Sensor must be configured with OUTS = AS5600_OUTPUT_STAGE_ANALOG_RR
+ * @note ADC must be initialized and calibrated before calling
  */
-void AS5600_BurnAngleCommand(AS5600_t *as5600);
+float as5600_adc_get_angle(as5600_t *as5600);
 
 /**
- * @brief The host microcontroller can perform a permanent writing of MANG and CONFIG with a BURN_SETTING command. 
- * To perform a BURN_SETTING command, write the value 0x40 into register 0xFF. 
- * MANG can be written only if ZPOS and MPOS have never been permanently written (ZMCO = 00). 
- * The BURN_ SETTING command can be performed only one time.
+ * @brief Burn zero and max position to non-volatile memory
  * 
- * @param as5600 
+ * Permanently writes ZPOS and MPOS registers. Can be executed up to 3 times only.
+ * Check ZMCO register to see remaining burn count.
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * 
+ * @warning This operation is PERMANENT and has limited uses
+ * @note Magnet must be detected (MD=1) for this operation to succeed
  */
-void AS5600_BurnSettingCommand(AS5600_t *as5600);
+void as5600_burn_angle_command(as5600_t *as5600);
 
 /**
- * @brief Convert register string to register address
+ * @brief Burn max angle and configuration to non-volatile memory
  * 
- * @param reg_str Register string
- * @return as5600_reg_t Register address
+ * Permanently writes MANG and CONF registers. Can only be executed once,
+ * and only if ZPOS/MPOS have never been burned (ZMCO=0).
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * 
+ * @warning This operation is PERMANENT and can only be done once ever
  */
-AS5600_reg_t AS5600_RegStrToAddr(AS5600_t *as5600, const char *reg_str);
-
-// --------------------------------------------------------------
-// ------------------ GPIO and ADC FUNCTIONS --------------------
-// --------------------------------------------------------------
+void as5600_burn_setting_command(as5600_t *as5600);
 
 /**
- * @brief Initialize the ADC driver
+ * @brief Convert register name string to register address
  * 
- * @param as5600 
+ * Utility function to map human-readable register names to addresses.
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance (stores result in reg field)
+ * @param[in] reg_str Register name string (e.g., "zmco", "zpos", "angl")
+ * @return Register address, or -1 if string not recognized
  */
-void AS5600_InitADC(AS5600_t *as5600);
+as5600_reg_t as5600_reg_str_to_addr(as5600_t *as5600, const char *reg_str);
+
+// =============================================================================
+// GPIO AND ADC FUNCTIONS
+// =============================================================================
 
 /**
- * @brief Initialize the ADC driver with a shared handle
+ * @brief Initialize ADC for analog angle reading
  * 
- * @param as5600 
- * @param shared_handle Shared ADC handle
+ * Configures ADC for the OUT pin. Use for independent ADC configuration.
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance
  */
-void AS5600_InitADC_2(AS5600_t *as5600, adc_oneshot_unit_handle_t shared_handle);
+void as5600_init_adc(as5600_t *as5600);
 
 /**
- * @brief Deinitialize the ADC driver
+ * @brief Initialize ADC channel with shared ADC unit
  * 
- * @param as5600 
+ * Configures ADC channel on an already-initialized ADC unit handle.
+ * Use when multiple ADC channels share the same ADC unit.
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[in] shared_handle Shared ADC unit handle
  */
-void AS5600_DeinitADC(AS5600_t *as5600);
+void as5600_init_adc_shared(as5600_t *as5600, adc_oneshot_unit_handle_t shared_handle);
 
 /**
- * @brief Initialize the GPIO driver
+ * @brief Deinitialize ADC
  * 
- * @param as5600 
+ * @param[in,out] as5600 Pointer to AS5600 instance
  */
-void AS5600_InitGPIO(AS5600_t *as5600);
+void as5600_deinit_adc(as5600_t *as5600);
 
 /**
- * @brief Deinitialize the GPIO driver
+ * @brief Initialize GPIO for OUT pin control
  * 
- * @param as5600 
+ * @param[in,out] as5600 Pointer to AS5600 instance
  */
-void AS5600_DeinitGPIO(AS5600_t *as5600);
+void as5600_init_gpio(as5600_t *as5600);
 
 /**
- * @brief Set the GPIO pin to the specified value
+ * @brief Deinitialize GPIO
  * 
- * @param value Value to set (0 or 1)
+ * @param[in,out] as5600 Pointer to AS5600 instance
  */
-void AS5600_SetGPIO(AS5600_t *as5600, uint8_t value);
-
-// -------------------------------------------------------------
-// ---------------------- I2C FUNCTIONS ------------------------
-// -------------------------------------------------------------
+void as5600_deinit_gpio(as5600_t *as5600);
 
 /**
- * @brief Read register
+ * @brief Set GPIO OUT pin level
  * 
- * @param reg Register address
- * @param data Pointer to the data
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[in] value Level to set (0=low, 1=high)
  */
-void AS5600_ReadReg(AS5600_t *as5600, AS5600_reg_t reg, uint16_t *data);
+void as5600_set_gpio(as5600_t *as5600, uint8_t value);
+
+// =============================================================================
+// I2C REGISTER ACCESS FUNCTIONS
+// =============================================================================
 
 /**
- * @brief Write register
+ * @brief Read AS5600 register
  * 
- * @param reg Register address
- * @param data Data to write
+ * Reads 1 byte (ZMCO, STATUS, AGC) or 2 bytes (all other registers).
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[in] reg Register address
+ * @param[out] data Pointer to store read value
  */
-void AS5600_WriteReg(AS5600_t *as5600, AS5600_reg_t reg, uint16_t data);
+void as5600_read_reg(as5600_t *as5600, as5600_reg_t reg, uint16_t *data);
 
 /**
- * @brief Check if the register is valid for reading
+ * @brief Write AS5600 register
  * 
- * @param reg Register address
- * @return true if the register is valid
- * @return false if the register is invalid
+ * Writes 1 byte (BURN) or 2 bytes (configuration registers).
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[in] reg Register address
+ * @param[in] data Data value to write
  */
-bool AS5600_IsValidReadReg(AS5600_t *as5600, AS5600_reg_t reg);
+void as5600_write_reg(as5600_t *as5600, as5600_reg_t reg, uint16_t data);
 
 /**
- * @brief Check if the register is valid for writing
+ * @brief Check if register is valid for reading
  * 
- * @param reg Register address
- * @return true if the register is valid
- * @return false if the register is invalid
+ * @param[in] as5600 Pointer to AS5600 instance
+ * @param[in] reg Register address
+ * @return true if register is readable
  */
-bool AS5600_IsValidWriteReg(AS5600_t *as5600, AS5600_reg_t reg);
-
-// -------------------------------------------------------------
-// ---------------------- CONFIG REGISTERS ---------------------
-// -------------------------------------------------------------
+bool as5600_is_valid_read_reg(as5600_t *as5600, as5600_reg_t reg);
 
 /**
- * @brief Set the start position by writing the ZPOS register
+ * @brief Check if register is valid for writing
  * 
- * @param start_position 
+ * @param[in] as5600 Pointer to AS5600 instance
+ * @param[in] reg Register address
+ * @return true if register is writable
  */
-void AS5600_SetStartPosition(AS5600_t *as5600, uint16_t start_position);
+bool as5600_is_valid_write_reg(as5600_t *as5600, as5600_reg_t reg);
+
+// =============================================================================
+// CONFIGURATION REGISTER FUNCTIONS
+// =============================================================================
 
 /**
- * @brief Get the start position by reading the ZPOS register
+ * @brief Set zero position (ZPOS)
  * 
- * @param start_position 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[in] start_position Zero position value (0-4095)
  */
-void AS5600_GetStartPosition(AS5600_t *as5600, uint16_t *start_position);
+void as5600_set_start_position(as5600_t *as5600, uint16_t start_position);
 
 /**
- * @brief Set the stop position by writing the MPOS register
+ * @brief Get zero position (ZPOS)
  * 
- * @param stop_position 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[out] start_position Pointer to store zero position value
  */
-void AS5600_SetStopPosition(AS5600_t *as5600, uint16_t stop_position);
+void as5600_get_start_position(as5600_t *as5600, uint16_t *start_position);
 
 /**
- * @brief Get the stop position by reading the MPOS register
+ * @brief Set maximum position (MPOS)
  * 
- * @param stop_position 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[in] stop_position Maximum position value (0-4095)
  */
-void AS5600_GetStopPosition(AS5600_t *as5600, uint16_t *stop_position);
+void as5600_set_stop_position(as5600_t *as5600, uint16_t stop_position);
 
 /**
- * @brief Set the maximum angle by writing the MANG register
+ * @brief Get maximum position (MPOS)
  * 
- * @param max_angle 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[out] stop_position Pointer to store maximum position value
  */
-void AS5600_SetMaxAngle(AS5600_t *as5600, uint16_t max_angle);
+void as5600_get_stop_position(as5600_t *as5600, uint16_t *stop_position);
 
 /**
- * @brief Get the maximum angle by reading the MANG register
+ * @brief Set maximum angle (MANG)
  * 
- * @param max_angle 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[in] max_angle Maximum angle value (0-4095)
  */
-void AS5600_GetMaxAngle(AS5600_t *as5600, uint16_t *max_angle);
+void as5600_set_max_angle(as5600_t *as5600, uint16_t max_angle);
 
 /**
- * @brief Set the configuration by writing the CONF register
+ * @brief Get maximum angle (MANG)
  * 
- * @param conf Configuration
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[out] max_angle Pointer to store maximum angle value
  */
-void AS5600_SetConf(AS5600_t *as5600, AS5600_config_t conf);
+void as5600_get_max_angle(as5600_t *as5600, uint16_t *max_angle);
 
 /**
- * @brief Get the configuration by reading the CONF register
+ * @brief Set configuration register (CONF)
  * 
- * @param conf Configuration
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[in] conf Configuration structure
  */
-void AS5600_GetConf(AS5600_t *as5600, AS5600_config_t *conf);
-
-
-// -------------------------------------------------------------
-// ---------------------- OUTPUT REGISTERS ---------------------
-// -------------------------------------------------------------
+void as5600_set_conf(as5600_t *as5600, as5600_config_t conf);
 
 /**
- * @brief Read RAW ANGLE register
+ * @brief Get configuration register (CONF)
  * 
- * @param reg buffer to store the register value
- * @param data Pointer to the data
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[out] conf Pointer to store configuration structure
  */
-void AS5600_GetRawAngle(AS5600_t *as5600, uint16_t *raw_angle);
+void as5600_get_conf(as5600_t *as5600, as5600_config_t *conf);
+
+
+// =============================================================================
+// OUTPUT REGISTER FUNCTIONS
+// =============================================================================
 
 /**
- * @brief Read ANGLE register
+ * @brief Get raw angle (no zero/max position applied)
  * 
- * @param reg buffer to store the register value
- * @param data Pointer to the data
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[out] raw_angle Pointer to store raw angle (0-4095)
  */
-void AS5600_GetAngle(AS5600_t *as5600, uint16_t *angle);
-
-// -------------------------------------------------------------
-// ---------------------- STATUS REGISTERS ---------------------
-// -------------------------------------------------------------
+void as5600_get_raw_angle(as5600_t *as5600, uint16_t *raw_angle);
 
 /**
- * @brief Read STATUS register
+ * @brief Get scaled angle (with zero/max position applied)
  * 
- * @param reg buffer to store the register value
- * @param data Pointer to the data
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[out] angle Pointer to store scaled angle (0-4095)
  */
-void AS5600_GetStatus(AS5600_t *as5600, uint8_t *status);
+void as5600_get_angle(as5600_t *as5600, uint16_t *angle);
+
+// =============================================================================
+// STATUS REGISTER FUNCTIONS
+// =============================================================================
 
 /**
- * @brief Read AGC register
+ * @brief Get status register
  * 
- * @param reg buffer to store the register value
- * @param data Pointer to the data
+ * Status bits include magnet detection (MD), magnet too strong (ML), magnet too weak (MH).
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[out] status Pointer to store status byte
  */
-void AS5600_GetAgc(AS5600_t *as5600, uint8_t *agc);
+void as5600_get_status(as5600_t *as5600, uint8_t *status);
 
 /**
- * @brief Read MAGNITUDE register
+ * @brief Get automatic gain control value
  * 
- * @param reg buffer to store the register value
- * @param data Pointer to the data
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[out] agc Pointer to store AGC value (0-255)
  */
-void AS5600_GetMagnitude(AS5600_t *as5600, uint16_t *magnitude);
+void as5600_get_agc(as5600_t *as5600, uint8_t *agc);
 
+/**
+ * @brief Get magnetic field magnitude
+ * 
+ * @param[in,out] as5600 Pointer to AS5600 instance
+ * @param[out] magnitude Pointer to store magnitude value
+ */
+void as5600_get_magnitude(as5600_t *as5600, uint16_t *magnitude);
 
-#endif // __AS5600_H__
+#ifdef __cplusplus
+}
+#endif
+
+#endif // AS5600_H
