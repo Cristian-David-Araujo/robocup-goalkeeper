@@ -75,6 +75,7 @@ pid_parameter_t g_velocity_pid_param = {
 
 raw_sensor_data_t g_sensor_data = {0};
 velocity_t g_robot_estimated = {0};
+fused_pose_t g_fused_pose = {0};
 
 // =============================================================================
 // SYNCHRONIZATION PRIMITIVES
@@ -89,6 +90,7 @@ SemaphoreHandle_t g_pid_mutex = NULL;
 SemaphoreHandle_t g_velocity_pid_mutex = NULL;
 SemaphoreHandle_t g_adc_mutex = NULL;
 SemaphoreHandle_t g_estimated_data_mutex = NULL;
+SemaphoreHandle_t g_fused_pose_mutex = NULL;
 
 // =============================================================================
 // TASK HANDLES
@@ -96,6 +98,7 @@ SemaphoreHandle_t g_estimated_data_mutex = NULL;
 
 TaskHandle_t g_task_sensor_handle = NULL;
 TaskHandle_t g_task_control_handle = NULL;
+TaskHandle_t g_task_sensor_fusion_handle = NULL;
 TaskHandle_t g_handle_parser_task = NULL;
 
 // =============================================================================
@@ -107,6 +110,7 @@ void task_motor_control(void *pvParameters);
 void task_inverse_kinematics(void *pvParameters);
 void task_velocity_control(void *pvParameters);
 void task_move_trajectory(void *pvParameters);
+void task_sensor_fusion(void *pvParameters);
 
 // =============================================================================
 // APPLICATION MAIN ENTRY POINT
@@ -185,6 +189,7 @@ void app_main(void)
     g_velocity_pid_mutex = xSemaphoreCreateMutex();
     g_adc_mutex = xSemaphoreCreateMutex();
     g_estimated_data_mutex = xSemaphoreCreateMutex();
+    g_fused_pose_mutex = xSemaphoreCreateMutex();
     
     // Create queues for cascaded control flow:
     // Trajectory → Velocity PID → IK → Wheel PID → Motors
@@ -194,7 +199,7 @@ void app_main(void)
     
     // Validate all primitives were created successfully
     if (!g_sensor_data_mutex || !g_pid_mutex || !g_velocity_pid_mutex ||
-        !g_adc_mutex || !g_estimated_data_mutex || 
+        !g_adc_mutex || !g_estimated_data_mutex || !g_fused_pose_mutex ||
         !g_desired_velocity_queue || !g_velocity_command_queue || 
         !g_wheel_target_queue) {
         ESP_LOGE(TAG, "Failed to create synchronization primitives");
@@ -203,6 +208,7 @@ void app_main(void)
         ESP_LOGE(TAG, "  velocity_pid_mutex: %p", g_velocity_pid_mutex);
         ESP_LOGE(TAG, "  adc_mutex: %p", g_adc_mutex);
         ESP_LOGE(TAG, "  estimated_data_mutex: %p", g_estimated_data_mutex);
+        ESP_LOGE(TAG, "  fused_pose_mutex: %p", g_fused_pose_mutex);
         ESP_LOGE(TAG, "  desired_velocity_queue: %p", g_desired_velocity_queue);
         ESP_LOGE(TAG, "  velocity_command_queue: %p", g_velocity_command_queue);
         ESP_LOGE(TAG, "  wheel_target_queue: %p", g_wheel_target_queue);
@@ -234,73 +240,97 @@ void app_main(void)
     }
     ESP_LOGI(TAG, "  ✓ Sensor task created (priority 6)");
     
-    // Inverse kinematics task (5) - must run before control
+    // Sensor fusion task (5) - high priority, runs at 100 Hz
+    xReturned = xTaskCreate(
+        task_sensor_fusion,
+        "FusionTask",
+        4096,
+        NULL,
+        5,
+        &g_task_sensor_fusion_handle
+    );
+    if (xReturned != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create sensor fusion task");
+        return;
+    }
+    ESP_LOGI(TAG, "  ✓ Sensor fusion task created (priority 5)");
+    
+    // Inverse kinematics task (4) - must run before control
     xReturned = xTaskCreate(
         task_inverse_kinematics,
         "IK_Task",
         4096,
         NULL,
-        5,
+        4,
         &g_task_ik_handle
     );
     if (xReturned != pdPASS) {
         ESP_LOGE(TAG, "Failed to create IK task");
         return;
     }
-    ESP_LOGI(TAG, "  ✓ IK task created (priority 5)");
+    ESP_LOGI(TAG, "  ✓ IK task created (priority 4)");
     
-    // Velocity control task (4) - outer PID loop
+    // Velocity control task (3) - outer PID loop
     xReturned = xTaskCreate(
         task_velocity_control,
         "VelCtrlTask",
         4096,
         NULL,
-        4,
+        3,
         &g_task_velocity_control_handle
     );
     if (xReturned != pdPASS) {
         ESP_LOGE(TAG, "Failed to create velocity control task");
         return;
     }
-    ESP_LOGI(TAG, "  ✓ Velocity control task created (priority 4)");
+    ESP_LOGI(TAG, "  ✓ Velocity control task created (priority 3)");
     
-    // Trajectory generation task (3)
+    // Trajectory generation task (2)
     xReturned = xTaskCreate(
         task_move_trajectory,
         "MoveTask",
         4096,  // Increased from 2048 to prevent stack overflow
         NULL,
-        3,
+        2,
         &g_task_trajectory_handle
     );
     if (xReturned != pdPASS) {
         ESP_LOGE(TAG, "Failed to create move task");
         return;
     }
-    ESP_LOGI(TAG, "  ✓ Trajectory task created (priority 3)");
+    ESP_LOGI(TAG, "  ✓ Trajectory task created (priority 2)");
     
-    // Motor control task (2) - inner PID loop
+    // Motor control task (1) - inner PID loop (lowest priority)
     xReturned = xTaskCreate(
         task_motor_control,
         "MotorCtrlTask",
         4096,
         NULL,
-        2,
+        1,
         &g_task_control_handle
     );
     if (xReturned != pdPASS) {
         ESP_LOGE(TAG, "Failed to create motor control task");
         return;
     }
-    ESP_LOGI(TAG, "  ✓ Motor control task created (priority 2)");
+    ESP_LOGI(TAG, "  ✓ Motor control task created (priority 1)");
     
     ESP_LOGI(TAG, "==============================================");
     ESP_LOGI(TAG, "All tasks created successfully");
     ESP_LOGI(TAG, "Task Communication Architecture:");
+    ESP_LOGI(TAG, "  Priority 6: Sensor reading (encoders + IMU)");
+    ESP_LOGI(TAG, "  Priority 5: Sensor fusion (IMU + kinematics)");
+    ESP_LOGI(TAG, "  Priority 4: Inverse kinematics");
+    ESP_LOGI(TAG, "  Priority 3: Velocity control (outer PID)");
+    ESP_LOGI(TAG, "  Priority 2: Trajectory generation");
+    ESP_LOGI(TAG, "  Priority 1: Motor control (inner PID)");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "Data Flow:");
     ESP_LOGI(TAG, "  Trajectory → Vel Control: Queue (desired velocity)");
     ESP_LOGI(TAG, "  Vel Control → IK: Queue (corrected velocity)");
     ESP_LOGI(TAG, "  IK → Control: Queue (wheel targets)");
-    ESP_LOGI(TAG, "  Sensor ↔ Tasks: Mutexes (shared data)");
+    ESP_LOGI(TAG, "  Sensor → Fusion: Mutex (kinematics velocity)");
+    ESP_LOGI(TAG, "  Fusion → All: Mutex (fused pose estimate)");
     ESP_LOGI(TAG, "==============================================");
     ESP_LOGI(TAG, "System running...");
 }

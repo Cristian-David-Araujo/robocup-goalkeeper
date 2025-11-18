@@ -68,6 +68,45 @@ typedef struct {
     float phi_dot[3];  ///< Angular velocity (rad/s) for wheels 0, 1, 2
 } wheel_speeds_t;
 
+/**
+ * @brief IMU raw data structure
+ * 
+ * Contains orientation and motion data from IMU sensor.
+ * Thread-safety: Not thread-safe. Protect with mutex when sharing between tasks.
+ */
+typedef struct {
+    float pitch_rad;    ///< Pitch angle around Y-axis (rad)
+    float roll_rad;     ///< Roll angle around X-axis (rad)
+    float yaw_rad;      ///< Yaw angle around Z-axis (rad)
+    float accel_x;      ///< Linear acceleration in X-axis (m/s²)
+    float accel_y;      ///< Linear acceleration in Y-axis (m/s²)
+    float accel_z;      ///< Linear acceleration in Z-axis (m/s²)
+    float gyro_x;       ///< Angular velocity around X-axis (rad/s)
+    float gyro_y;       ///< Angular velocity around Y-axis (rad/s)
+    float gyro_z;       ///< Angular velocity around Z-axis (rad/s)
+    uint64_t timestamp_us;  ///< Timestamp in microseconds
+} imu_data_t;
+
+/**
+ * @brief Fused pose estimate from sensor fusion
+ * 
+ * Contains the final fused pose combining IMU and kinematics data.
+ * Thread-safety: Not thread-safe. Use g_fused_pose_mutex for inter-task access.
+ */
+typedef struct {
+    float pos_x;        ///< Position in X-axis (m)
+    float pos_y;        ///< Position in Y-axis (m)
+    float vel_x;        ///< Linear velocity in X-axis (m/s)
+    float vel_y;        ///< Linear velocity in Y-axis (m/s)
+    float vel_angular;  ///< Angular velocity around Z-axis (rad/s)
+    float pitch_rad;    ///< Pitch angle around Y-axis (rad)
+    float roll_rad;     ///< Roll angle around X-axis (rad)
+    float yaw_rad;      ///< Yaw angle around Z-axis (rad)
+    float orientation_confidence;  ///< Orientation confidence [0.0, 1.0]
+    float velocity_confidence;     ///< Velocity confidence [0.0, 1.0]
+    uint64_t timestamp_us;  ///< Timestamp of fusion computation (μs)
+} fused_pose_t;
+
 #ifdef __cplusplus
 }
 #endif

@@ -116,6 +116,16 @@ extern "C" {
 #define KINEMATICS_TASK_PERIOD_MS 10       ///< Inverse kinematics task period (ms)
 
 // =============================================================================
+// SENSOR FUSION CONFIGURATION
+// =============================================================================
+
+#define FUSION_TASK_PERIOD_MS 10           ///< Sensor fusion task period (ms) - 100 Hz
+#define FUSION_ALPHA_ORIENTATION 0.98f     ///< Complementary filter weight for IMU orientation
+#define FUSION_ALPHA_VELOCITY 0.05f        ///< Complementary filter weight for IMU velocity
+#define FUSION_GYRO_DRIFT_COMP 0.001f      ///< Gyroscope drift compensation factor
+#define FUSION_ACCEL_THRESHOLD 0.1f        ///< Minimum acceleration to integrate (m/s²)
+
+// =============================================================================
 // I2C BUS CONFIGURATION
 // =============================================================================
 

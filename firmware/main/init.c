@@ -41,21 +41,14 @@ int init_sensors(void)
     ESP_LOGI(TAG, "AS5600 encoders initialized successfully");
 
     // ==========================================================================
-    // BNO055 IMU CONFIGURATION (Currently disabled)
+    // BNO055 IMU CONFIGURATION
     // ==========================================================================
     
-    /*
-    int status = bno055_init(&g_bno055, GPIO_IMU_I2C_SDA, GPIO_IMU_I2C_SCL, BNO055_I2C_MASTER_NUM);
-    while (status != BNO055_SUCCESS) {
-        ESP_LOGE(TAG, "Failed to initialize BNO055 sensor, retrying...");
-        bno055_reset(&g_bno055);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        status = bno055_init(&g_bno055, GPIO_IMU_I2C_SDA, GPIO_IMU_I2C_SCL, BNO055_I2C_MASTER_NUM);
-    }
-    ESP_LOGI(TAG, "BNO055 IMU initialized successfully");
-    */
-
-    ESP_LOGI(TAG, "Sensor initialization complete");
+    // Note: BNO055 initialization is now handled by the sensor fusion task
+    // to allow proper configuration of operation mode and units.
+    // The sensor fusion task will initialize the IMU on first run.
+    
+    ESP_LOGI(TAG, "Sensor initialization complete (IMU will be initialized by fusion task)");
     return INIT_SUCCESS;
 }
 

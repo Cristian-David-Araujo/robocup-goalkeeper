@@ -71,8 +71,14 @@ extern raw_sensor_data_t g_sensor_data;
 /// @brief Estimated robot velocity (from forward kinematics)
 /// Protected by: g_estimated_data_mutex
 /// Writers: Sensor task
-/// Readers: Trajectory task (for logging)
+/// Readers: Trajectory task (for logging), Fusion task
 extern velocity_t g_robot_estimated;
+
+/// @brief Fused pose estimate from sensor fusion
+/// Protected by: g_fused_pose_mutex
+/// Writers: Sensor fusion task
+/// Readers: All tasks requiring stable pose estimate
+extern fused_pose_t g_fused_pose;
 
 // =============================================================================
 // SYNCHRONIZATION PRIMITIVES
@@ -110,8 +116,12 @@ extern SemaphoreHandle_t g_velocity_pid_mutex;
 extern SemaphoreHandle_t g_adc_mutex;
 
 /// @brief Mutex protecting g_robot_estimated
-/// Shared between: Sensor task (write), Trajectory task (read)
+/// Shared between: Sensor task (write), Trajectory task (read), Fusion task (read)
 extern SemaphoreHandle_t g_estimated_data_mutex;
+
+/// @brief Mutex protecting g_fused_pose
+/// Shared between: Fusion task (write), All other tasks (read)
+extern SemaphoreHandle_t g_fused_pose_mutex;
 
 // =============================================================================
 // TASK HANDLES
@@ -131,6 +141,9 @@ extern TaskHandle_t g_task_velocity_control_handle;
 
 /// @brief Handle for trajectory generation task
 extern TaskHandle_t g_task_trajectory_handle;
+
+/// @brief Handle for sensor fusion task
+extern TaskHandle_t g_task_sensor_fusion_handle;
 
 /// @brief Handle for UART parser task (used for parameter tuning)
 extern TaskHandle_t g_handle_parser_task;
