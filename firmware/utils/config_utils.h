@@ -76,9 +76,9 @@ extern "C" {
 // -----------------------------------------------------------------------------
 
 #define PID_VELOCITY_KP 1.0f               ///< Proportional gain for velocity control
-#define PID_VELOCITY_KI 0.1f               ///< Integral gain for velocity control
-#define PID_VELOCITY_KD 0.05f              ///< Derivative gain for velocity control
-#define PID_VELOCITY_BETA 0.1f             ///< Beta filter coefficient for derivative term
+#define PID_VELOCITY_KI 0.01f               ///< Integral gain for velocity control
+#define PID_VELOCITY_KD 0.00f              ///< Derivative gain for velocity control
+#define PID_VELOCITY_BETA 0.0f             ///< Beta filter coefficient for derivative term
 #define PID_VELOCITY_MAX_OUTPUT 1.0f       ///< Maximum velocity output (m/s or rad/s)
 #define PID_VELOCITY_MIN_OUTPUT -1.0f      ///< Minimum velocity output (m/s or rad/s)
 

@@ -136,6 +136,10 @@ void task_velocity_control(void *pvParameters)
         // 3. COMPUTE PID CORRECTIONS FOR VELOCITY TRACKING
         // -------------------------------------------------------------
         
+        // OPEN-LOOP TEST: PID disabled, pass through desired velocity
+        // corrected = desired;
+        
+        //CLOSED-LOOP CONTROL (currently disabled):
         if (g_velocity_pid_mutex && 
             xSemaphoreTake(g_velocity_pid_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             
@@ -164,6 +168,7 @@ void task_velocity_control(void *pvParameters)
             ESP_LOGW(TAG, "PID mutex timeout - using feedforward control");
             corrected = desired;
         }
+        
 
         // -------------------------------------------------------------
         // 4. SEND CORRECTED VELOCITY TO IK TASK

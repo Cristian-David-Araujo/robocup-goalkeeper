@@ -28,9 +28,8 @@ int init_sensors(void)
     g_as5600[2].conf.OUTS = AS5600_OUTPUT_STAGE_ANALOG_RR;
 
     // Create shared ADC unit for all encoders
-    esp_err_t ret = adc_create_unit(&g_shared_adc_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create ADC unit: %s", esp_err_to_name(ret));
+    if (!adc_create_unit(&g_shared_adc_handle)) {
+        ESP_LOGE(TAG, "Failed to create ADC unit");
         return INIT_ERROR_AS5600;
     }
 

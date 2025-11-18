@@ -190,7 +190,7 @@ void app_main(void)
     // Trajectory → Velocity PID → IK → Wheel PID → Motors
     g_desired_velocity_queue = xQueueCreate(2, sizeof(velocity_t));
     g_velocity_command_queue = xQueueCreate(2, sizeof(velocity_t));
-    g_wheel_target_queue = xQueueCreate(2, sizeof(wheel_speeds_t));
+    g_wheel_target_queue = xQueueCreate(1, sizeof(wheel_speeds_t));  // Length 1 for xQueueOverwrite
     
     // Validate all primitives were created successfully
     if (!g_sensor_data_mutex || !g_pid_mutex || !g_velocity_pid_mutex ||
@@ -268,7 +268,7 @@ void app_main(void)
     xReturned = xTaskCreate(
         task_move_trajectory,
         "MoveTask",
-        2048,
+        4096,  // Increased from 2048 to prevent stack overflow
         NULL,
         3,
         &g_task_trajectory_handle

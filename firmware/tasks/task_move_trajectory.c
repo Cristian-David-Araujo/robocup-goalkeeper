@@ -40,7 +40,7 @@ TaskHandle_t g_task_trajectory_handle = NULL;
 // TRAJECTORY PARAMETERS
 // =============================================================================
 
-#define CIRCULAR_RADIUS 0.5f       ///< Radius of circular trajectory (m)
+#define CIRCULAR_RADIUS 1.0f       ///< Radius of circular trajectory (m)
 #define OMEGA_CIRC 0.5f            ///< Angular velocity for circular motion (rad/s)
 #define DT_SECONDS 0.02f           ///< Control loop period (s)
 #define TASK_PERIOD_MS ((int)(DT_SECONDS * 1000))  ///< Period in milliseconds
