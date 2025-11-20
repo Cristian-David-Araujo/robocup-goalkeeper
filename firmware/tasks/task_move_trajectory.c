@@ -8,12 +8,12 @@
  * 
  * Task characteristics:
  * - Period: 20 ms (50 Hz)
- * - Priority: 3 (medium)
+ * - Priority: 2 (low - reference generation)
  * - Stack: 2048 bytes
  * 
  * Communication:
  * - Sends velocity commands via g_desired_velocity_queue
- * - Reads estimated velocity for logging via g_estimated_data_mutex
+ * - Reads fused velocity for logging via g_fused_pose_mutex (v2.0)
  */
 
 #include "freertos/FreeRTOS.h"
@@ -111,13 +111,15 @@ void task_move_trajectory(void *arg)
         }
 
         // =================================================================
-        // READ ESTIMATED VELOCITY FOR LOGGING (Thread-safe)
+        // READ FUSED VELOCITY FOR LOGGING (Thread-safe) - v2.0
         // =================================================================
         
-        if (g_estimated_data_mutex && 
-            xSemaphoreTake(g_estimated_data_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-            speed_estimated = g_robot_estimated;
-            xSemaphoreGive(g_estimated_data_mutex);
+        if (g_fused_pose_mutex && 
+            xSemaphoreTake(g_fused_pose_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+            speed_estimated.vx = g_fused_pose.vel_x;
+            speed_estimated.vy = g_fused_pose.vel_y;
+            speed_estimated.wz = g_fused_pose.vel_angular;
+            xSemaphoreGive(g_fused_pose_mutex);
         }
 
         // =================================================================
