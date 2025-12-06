@@ -121,6 +121,20 @@ extern "C" {
 
 #define BNO055_I2C_MASTER_NUM 0            ///< I2C master port for BNO055 IMU
 
+// =============================================================================
+// WIFI CONTROL CONFIGURATION
+// =============================================================================
+
+#define WIFI_CONTROL_SSID           "RoboCup_Network"     ///< WiFi network SSID
+#define WIFI_CONTROL_PASSWORD       "goalkeeper2024"     ///< WiFi password
+#define WIFI_CONTROL_PORT           3333                 ///< UDP listening port
+#define WIFI_CONTROL_BUFFER_SIZE    256                  ///< Receive buffer size
+
+// Command timeout and limits
+#define WIFI_CMD_TIMEOUT_MS         500                  ///< Command timeout (ms)
+#define WIFI_MAX_LINEAR_VEL         1.0f                 ///< Max linear velocity (m/s)
+#define WIFI_MAX_ANGULAR_VEL        2.0f                 ///< Max angular velocity (rad/s)
+
 #ifdef __cplusplus
 }
 #endif
