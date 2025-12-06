@@ -83,19 +83,24 @@ void task_move_trajectory(void *arg)
         float vx_cmd = -CIRCULAR_RADIUS * OMEGA_CIRC * sinf(OMEGA_CIRC * t);
         float vy_cmd =  CIRCULAR_RADIUS * OMEGA_CIRC * cosf(OMEGA_CIRC * t);
         
-        // Compute angular velocity from change in heading
-        float angle = atan2f(vy_cmd, vx_cmd);
-        float omega_cmd = (angle - prev_angle) / DT_SECONDS;
+        // Compute desired heading angle (direction of motion)
+        float desired_angle = atan2f(vy_cmd, vx_cmd);
         
-        // Handle angle wrap-around
-        if (omega_cmd > M_PI / DT_SECONDS) {
-            omega_cmd -= 2.0f * M_PI / DT_SECONDS;
+        // Compute angular velocity to align robot with motion direction
+        float angle_error = desired_angle - prev_angle;
+        
+        // Normalize angle error to [-π, π]
+        while (angle_error > M_PI) {
+            angle_error -= 2.0f * M_PI;
         }
-        if (omega_cmd < -M_PI / DT_SECONDS) {
-            omega_cmd += 2.0f * M_PI / DT_SECONDS;
+        while (angle_error < -M_PI) {
+            angle_error += 2.0f * M_PI;
         }
         
-        prev_angle = angle;
+        // Angular velocity command (proportional control to track desired heading)
+        float omega_cmd = angle_error / DT_SECONDS;
+        
+        prev_angle = desired_angle;
 
         // =================================================================
         // SEND VELOCITY COMMAND TO VELOCITY CONTROL TASK (Via Queue)
