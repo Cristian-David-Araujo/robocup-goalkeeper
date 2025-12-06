@@ -41,6 +41,10 @@ ROBOT_PORT = int(os.getenv("ROBOT_PORT", "3333"))
 COMMAND_TIMEOUT_SEC = float(os.getenv("COMMAND_TIMEOUT", "1.0"))
 UPDATE_RATE_HZ = int(os.getenv("UPDATE_RATE_HZ", "20"))
 
+# Velocity ramping (gradual acceleration)
+MAX_ACCELERATION = float(os.getenv("MAX_ACCELERATION", "2.0"))  # m/s² or rad/s²
+RAMP_ENABLED = os.getenv("RAMP_ENABLED", "true").lower() == "true"
+
 # =============================================================================
 # LOGGING SETUP
 # =============================================================================
@@ -79,8 +83,19 @@ current_velocity = {
     "timestamp": None
 }
 
+# Target velocity (what user wants)
+target_velocity = {
+    "vx": 0.0,
+    "vy": 0.0,
+    "wz": 0.0
+}
+
 # Last command time for timeout detection
 last_command_time = None
+
+# Robot connection status
+robot_connected = False
+last_robot_response_time = None
 
 # =============================================================================
 # ROBOT COMMUNICATION
@@ -98,6 +113,8 @@ class RobotAdapter:
         self.robot_ip = robot_ip
         self.robot_port = robot_port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.settimeout(0.5)  # 500ms timeout for connection check
+        self.last_send_time = datetime.now()
         logger.info(f"Robot adapter initialized for {robot_ip}:{robot_port}")
     
     def send_command(self, vx: float, vy: float, wz: float) -> bool:
@@ -137,10 +154,59 @@ class RobotAdapter:
     def close(self):
         """Close the UDP socket."""
         self.sock.close()
+    
+    def check_connection(self) -> bool:
+        """
+        Check if robot is reachable.
+        
+        Returns:
+            True if robot is responsive, False otherwise
+        """
+        try:
+            # Send a ping command (zero velocity as heartbeat)
+            test_cmd = {"vx": 0.0, "vy": 0.0, "wz": 0.0}
+            message = json.dumps(test_cmd).encode('utf-8')
+            self.sock.sendto(message, (self.robot_ip, self.robot_port))
+            return True
+        except Exception as e:
+            logger.debug(f"Connection check failed: {e}")
+            return False
 
 
 # Global robot adapter instance
 robot_adapter = RobotAdapter(ROBOT_IP, ROBOT_PORT)
+
+# =============================================================================
+# VELOCITY RAMPING
+# =============================================================================
+
+def apply_velocity_ramp(current: Dict[str, float], target: Dict[str, float], dt: float) -> Dict[str, float]:
+    """
+    Apply gradual velocity ramping to avoid sudden movements.
+    
+    Args:
+        current: Current velocity {vx, vy, wz}
+        target: Target velocity {vx, vy, wz}
+        dt: Time delta in seconds
+    
+    Returns:
+        New velocity after applying acceleration limits
+    """
+    if not RAMP_ENABLED:
+        return target
+    
+    max_delta = MAX_ACCELERATION * dt
+    new_velocity = {}
+    
+    for key in ['vx', 'vy', 'wz']:
+        delta = target[key] - current[key]
+        
+        if abs(delta) <= max_delta:
+            new_velocity[key] = target[key]
+        else:
+            new_velocity[key] = current[key] + (max_delta if delta > 0 else -max_delta)
+    
+    return new_velocity
 
 # =============================================================================
 # API ENDPOINTS
@@ -177,7 +243,10 @@ async def get_config():
         "max_linear_velocity": MAX_LINEAR_VELOCITY,
         "max_angular_velocity": MAX_ANGULAR_VELOCITY,
         "update_rate_hz": UPDATE_RATE_HZ,
-        "command_timeout_sec": COMMAND_TIMEOUT_SEC
+        "command_timeout_sec": COMMAND_TIMEOUT_SEC,
+        "max_acceleration": MAX_ACCELERATION,
+        "ramp_enabled": RAMP_ENABLED,
+        "robot_connected": robot_connected
     })
 
 
@@ -224,35 +293,52 @@ async def websocket_endpoint(websocket: WebSocket):
             "type": "config",
             "max_linear_velocity": MAX_LINEAR_VELOCITY,
             "max_angular_velocity": MAX_ANGULAR_VELOCITY,
-            "update_rate_hz": UPDATE_RATE_HZ
+            "update_rate_hz": UPDATE_RATE_HZ,
+            "max_acceleration": MAX_ACCELERATION,
+            "ramp_enabled": RAMP_ENABLED,
+            "robot_connected": robot_connected
         })
         
         while True:
             # Receive velocity command from client
             data = await websocket.receive_json()
             
-            # Validate and clamp velocities
-            vx = max(-MAX_LINEAR_VELOCITY, min(MAX_LINEAR_VELOCITY, data.get("vx", 0.0)))
-            vy = max(-MAX_LINEAR_VELOCITY, min(MAX_LINEAR_VELOCITY, data.get("vy", 0.0)))
-            wz = max(-MAX_ANGULAR_VELOCITY, min(MAX_ANGULAR_VELOCITY, data.get("wz", 0.0)))
+            # Validate and clamp target velocities
+            target_velocity["vx"] = max(-MAX_LINEAR_VELOCITY, min(MAX_LINEAR_VELOCITY, data.get("vx", 0.0)))
+            target_velocity["vy"] = max(-MAX_LINEAR_VELOCITY, min(MAX_LINEAR_VELOCITY, data.get("vy", 0.0)))
+            target_velocity["wz"] = max(-MAX_ANGULAR_VELOCITY, min(MAX_ANGULAR_VELOCITY, data.get("wz", 0.0)))
+            
+            # Apply velocity ramping
+            dt = 1.0 / UPDATE_RATE_HZ
+            ramped_velocity = apply_velocity_ramp(
+                {"vx": current_velocity["vx"], "vy": current_velocity["vy"], "wz": current_velocity["wz"]},
+                target_velocity,
+                dt
+            )
             
             # Update current velocity
             current_velocity = {
-                "vx": vx,
-                "vy": vy,
-                "wz": wz,
+                "vx": ramped_velocity["vx"],
+                "vy": ramped_velocity["vy"],
+                "wz": ramped_velocity["wz"],
                 "timestamp": datetime.now().isoformat()
             }
             last_command_time = datetime.now()
             
             # Send command to robot
-            success = robot_adapter.send_command(vx, vy, wz)
+            success = robot_adapter.send_command(
+                current_velocity["vx"],
+                current_velocity["vy"],
+                current_velocity["wz"]
+            )
             
             # Send acknowledgment back to client
             await websocket.send_json({
                 "type": "ack",
                 "success": success,
-                "velocity": current_velocity
+                "velocity": current_velocity,
+                "target_velocity": target_velocity,
+                "robot_connected": robot_connected
             })
     
     except WebSocketDisconnect:
@@ -282,9 +368,11 @@ async def websocket_endpoint(websocket: WebSocket):
 async def startup_event():
     """Initialize background tasks on startup."""
     asyncio.create_task(safety_monitor())
+    asyncio.create_task(robot_connection_monitor())
     logger.info(f"Teleoperation server starting on {HOST}:{PORT}")
     logger.info(f"Robot target: {ROBOT_IP}:{ROBOT_PORT}")
     logger.info(f"Max velocities: linear={MAX_LINEAR_VELOCITY} m/s, angular={MAX_ANGULAR_VELOCITY} rad/s")
+    logger.info(f"Velocity ramping: {RAMP_ENABLED} (max accel: {MAX_ACCELERATION})")
 
 
 @app.on_event("shutdown")
@@ -301,7 +389,7 @@ async def safety_monitor():
     
     If no commands received within COMMAND_TIMEOUT_SEC, sends stop command.
     """
-    global current_velocity, last_command_time
+    global current_velocity, target_velocity, last_command_time
     
     logger.info("Safety monitor started")
     
@@ -316,8 +404,41 @@ async def safety_monitor():
                     logger.warning(f"Command timeout ({time_since_last_command:.2f}s) - stopping robot")
                     
                     current_velocity = {"vx": 0.0, "vy": 0.0, "wz": 0.0, "timestamp": datetime.now().isoformat()}
+                    target_velocity = {"vx": 0.0, "vy": 0.0, "wz": 0.0}
                     robot_adapter.stop()
                     last_command_time = None
+
+
+async def robot_connection_monitor():
+    """
+    Background task to monitor robot connection status.
+    
+    Periodically checks if robot is responsive.
+    """
+    global robot_connected, last_robot_response_time
+    
+    logger.info("Robot connection monitor started")
+    
+    while True:
+        await asyncio.sleep(2.0)  # Check every 2 seconds
+        
+        try:
+            # Attempt to check connection
+            is_connected = robot_adapter.check_connection()
+            
+            if is_connected:
+                if not robot_connected:
+                    logger.info("Robot connection established")
+                robot_connected = True
+                last_robot_response_time = datetime.now()
+            else:
+                if robot_connected:
+                    logger.warning("Robot connection lost")
+                robot_connected = False
+        
+        except Exception as e:
+            logger.error(f"Connection monitor error: {e}")
+            robot_connected = False
 
 # =============================================================================
 # MAIN ENTRY POINT

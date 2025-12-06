@@ -107,6 +107,13 @@
             opacity: 0.8;
         }
 
+        .velocity-target {
+            font-size: 0.9em;
+            opacity: 0.7;
+            margin-top: 5px;
+            font-style: italic;
+        }
+
         .controls-section {
             background: #f8f9fa;
             border-radius: 10px;
@@ -254,6 +261,10 @@
                 <div class="status-dot" id="statusDot"></div>
                 <span id="statusText">Disconnected</span>
             </div>
+            <div class="status-indicator">
+                <div class="status-dot" id="robotStatusDot"></div>
+                <span id="robotStatusText">Robot: Unknown</span>
+            </div>
             <div>
                 <span id="updateRate">0 Hz</span>
             </div>
@@ -264,16 +275,19 @@
             <div class="velocity-card">
                 <div class="velocity-label">Linear X</div>
                 <div class="velocity-value" id="vxDisplay">0.00</div>
+                <div class="velocity-target" id="vxTarget">→ 0.00</div>
                 <div class="velocity-unit">m/s</div>
             </div>
             <div class="velocity-card">
                 <div class="velocity-label">Linear Y</div>
                 <div class="velocity-value" id="vyDisplay">0.00</div>
+                <div class="velocity-target" id="vyTarget">→ 0.00</div>
                 <div class="velocity-unit">m/s</div>
             </div>
             <div class="velocity-card">
                 <div class="velocity-label">Angular Z</div>
                 <div class="velocity-value" id="wzDisplay">0.00</div>
+                <div class="velocity-target" id="wzTarget">→ 0.00</div>
                 <div class="velocity-unit">rad/s</div>
             </div>
         </div>
@@ -326,12 +340,19 @@
             • Press and hold keys to move the robot<br>
             • Release all keys to stop<br>
             • Multiple keys can be pressed simultaneously<br>
+            • Velocity changes are gradual (ramped) for smooth control<br>
             • The robot will stop automatically if connection is lost<br>
+            <br>
+            <strong>Status Indicators:</strong><br>
+            • WebSocket connection status (Server communication)<br>
+            • Robot connection status (Robot responsiveness)<br>
+            • Update rate (Commands per second)<br>
             <br>
             <strong>Safety:</strong><br>
             • Emergency Stop button immediately halts the robot<br>
             • Commands timeout after 1 second of no updates<br>
-            • Velocities are clamped to configured limits
+            • Velocities are clamped to configured limits<br>
+            • Gradual acceleration prevents sudden movements
         </div>
 
         <div class="footer">

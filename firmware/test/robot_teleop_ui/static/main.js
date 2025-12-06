@@ -11,7 +11,9 @@
 let config = {
     maxLinearVelocity: 1.0,
     maxAngularVelocity: 2.0,
-    updateRateHz: 20
+    updateRateHz: 20,
+    maxAcceleration: 2.0,
+    rampEnabled: true
 };
 
 // =============================================================================
@@ -21,6 +23,9 @@ let config = {
 // WebSocket connection
 let ws = null;
 let isConnected = false;
+
+// Robot connection status
+let robotConnected = false;
 
 // Key state tracking
 const keyState = {
@@ -32,8 +37,15 @@ const keyState = {
     e: false
 };
 
-// Current velocities
+// Current velocities (actual robot velocity with ramping)
 let currentVelocity = {
+    vx: 0.0,
+    vy: 0.0,
+    wz: 0.0
+};
+
+// Target velocities (what user wants)
+let targetVelocity = {
     vx: 0.0,
     vy: 0.0,
     wz: 0.0
@@ -91,6 +103,10 @@ function handleWebSocketMessage(data) {
         config.maxLinearVelocity = data.max_linear_velocity;
         config.maxAngularVelocity = data.max_angular_velocity;
         config.updateRateHz = data.update_rate_hz;
+        config.maxAcceleration = data.max_acceleration || 2.0;
+        config.rampEnabled = data.ramp_enabled !== false;
+        robotConnected = data.robot_connected || false;
+        updateRobotConnectionStatus(robotConnected);
         console.log('Received config:', config);
     } else if (data.type === 'ack') {
         if (data.velocity) {
@@ -99,8 +115,19 @@ function handleWebSocketMessage(data) {
                 vy: data.velocity.vy,
                 wz: data.velocity.wz
             };
-            updateVelocityDisplay();
         }
+        if (data.target_velocity) {
+            targetVelocity = {
+                vx: data.target_velocity.vx,
+                vy: data.target_velocity.vy,
+                wz: data.target_velocity.wz
+            };
+        }
+        if (data.robot_connected !== undefined) {
+            robotConnected = data.robot_connected;
+            updateRobotConnectionStatus(robotConnected);
+        }
+        updateVelocityDisplay();
     }
 }
 
@@ -202,10 +229,46 @@ function updateConnectionStatus(connected) {
     }
 }
 
+function updateRobotConnectionStatus(connected) {
+    const robotStatusDot = document.getElementById('robotStatusDot');
+    const robotStatusText = document.getElementById('robotStatusText');
+    
+    if (connected) {
+        robotStatusDot.classList.add('connected');
+        robotStatusText.textContent = 'Robot: Connected';
+        robotStatusText.style.color = '#28a745';
+    } else {
+        robotStatusDot.classList.remove('connected');
+        robotStatusText.textContent = 'Robot: Disconnected';
+        robotStatusText.style.color = '#dc3545';
+    }
+}
+
 function updateVelocityDisplay() {
+    // Update current velocity (actual)
     document.getElementById('vxDisplay').textContent = currentVelocity.vx.toFixed(2);
     document.getElementById('vyDisplay').textContent = currentVelocity.vy.toFixed(2);
     document.getElementById('wzDisplay').textContent = currentVelocity.wz.toFixed(2);
+    
+    // Update target velocity (what user wants)
+    const vxTargetEl = document.getElementById('vxTarget');
+    const vyTargetEl = document.getElementById('vyTarget');
+    const wzTargetEl = document.getElementById('wzTarget');
+    
+    if (vxTargetEl) {
+        const showTarget = Math.abs(targetVelocity.vx - currentVelocity.vx) > 0.01;
+        vxTargetEl.textContent = showTarget ? `→ ${targetVelocity.vx.toFixed(2)}` : '';
+    }
+    
+    if (vyTargetEl) {
+        const showTarget = Math.abs(targetVelocity.vy - currentVelocity.vy) > 0.01;
+        vyTargetEl.textContent = showTarget ? `→ ${targetVelocity.vy.toFixed(2)}` : '';
+    }
+    
+    if (wzTargetEl) {
+        const showTarget = Math.abs(targetVelocity.wz - currentVelocity.wz) > 0.01;
+        wzTargetEl.textContent = showTarget ? `→ ${targetVelocity.wz.toFixed(2)}` : '';
+    }
 }
 
 function emergencyStop() {

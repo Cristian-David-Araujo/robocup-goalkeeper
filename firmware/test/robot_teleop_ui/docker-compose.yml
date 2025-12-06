@@ -22,6 +22,10 @@ services:
       # Safety configuration
       - COMMAND_TIMEOUT=1.0     # seconds
       - UPDATE_RATE_HZ=20       # Hz
+      
+      # Velocity ramping (gradual acceleration)
+      - MAX_ACCELERATION=2.0    # m/s² or rad/s²
+      - RAMP_ENABLED=true       # Enable gradual velocity changes
     
     restart: unless-stopped
     

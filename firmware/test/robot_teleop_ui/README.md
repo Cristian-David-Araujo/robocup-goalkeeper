@@ -6,12 +6,15 @@ A real-time web-based teleoperation interface for controlling omnidirectional ro
 
 - 🎮 **Real-time keyboard control** - Game-like WASD + QE controls
 - 🔌 **WebSocket communication** - Low latency command streaming
+- 🔄 **Gradual velocity ramping** - Smooth acceleration for safer control
+- 📡 **Robot connection monitoring** - Real-time robot connectivity status
 - 🛡️ **Safety features**:
   - Emergency stop button
   - Automatic stop on connection loss
   - Command timeout (1 second default)
   - Velocity clamping
-- 📊 **Live monitoring** - Real-time velocity display and update rate
+  - Configurable acceleration limits
+- 📊 **Live monitoring** - Real-time velocity display (current & target), connection status, and update rate
 - 🐳 **Docker ready** - Easy deployment with Docker/Docker Compose
 - ⚙️ **Configurable** - Environment variables for all settings
 
@@ -114,6 +117,13 @@ All settings can be configured via environment variables:
 |----------|---------|-------------|
 | `COMMAND_TIMEOUT` | `1.0` | Command timeout in seconds |
 | `UPDATE_RATE_HZ` | `20` | Command update rate (Hz) |
+
+### Velocity Ramping
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_ACCELERATION` | `2.0` | Maximum acceleration (m/s² or rad/s²) |
+| `RAMP_ENABLED` | `true` | Enable gradual velocity changes |
 
 ## Communication Protocol
 
@@ -223,11 +233,15 @@ class RobotAdapter:
 ## Safety Features
 
 1. **Emergency Stop**: Red button immediately sends zero velocities
-2. **Connection Monitoring**: Robot stops if WebSocket disconnects
+2. **Connection Monitoring**: 
+   - Robot stops if WebSocket disconnects
+   - Real-time robot connectivity status display
+   - Periodic robot connection checks
 3. **Command Timeout**: Robot stops if no commands received for 1 second
 4. **Velocity Clamping**: All commands are clamped to configured limits
-5. **Window Blur Detection**: Robot stops when browser loses focus
-6. **Page Visibility**: Robot stops when tab is hidden
+5. **Velocity Ramping**: Gradual acceleration prevents sudden movements (configurable)
+6. **Window Blur Detection**: Robot stops when browser loses focus
+7. **Page Visibility**: Robot stops when tab is hidden
 
 ## Testing
 
