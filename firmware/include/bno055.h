@@ -1,179 +1,231 @@
 /**
  * @file bno055.h
+ * @brief BNO055 9-DOF IMU sensor driver interface
+ * 
+ * This module provides functions to interface with the Bosch BNO055 Intelligent
+ * 9-axis Absolute Orientation Sensor via I2C communication. The BNO055 integrates
+ * a triaxial accelerometer, gyroscope, and magnetometer with a sensor fusion
+ * algorithm to provide:
+ * - Absolute orientation (Euler angles)
+ * - Angular velocity
+ * - Linear acceleration
+ * - Magnetic field strength
+ * 
+ * Features:
+ * - Multiple operating modes (IMU, NDOF, Compass, etc.)
+ * - Configurable units (m/s², rad/s, radians, etc.)
+ * - Sensor calibration support
+ * - Power mode management
+ * 
+ * Thread-safety: Functions are NOT thread-safe. External synchronization required
+ * if sensor is accessed from multiple tasks.
+ * 
+ * @note All identifiers follow snake_case naming convention
  * @author Cristian David Araujo A. (cristian.araujo@udea.edu.co)
- * @brief 
- * @version 0.1
  * @date 2024-11-08
- * 
- * @copyright Copyright (c) 2024
- * 
  */
 
 #ifndef BNO055_H
 #define BNO055_H
 
-// Standard C includes
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
 
-// ESP32-S3 hardware abstraction layer (Your platform may have a different HAL)
 #include "platform_esp32s3.h"
-
-// Constants for BNO055 include
 #include "bno055_defs.h"
 
-#define I2C_MASTER_FREQ_HZ  400*1000    /*!< I2C master clock frequency */
-#define BNO055_SENSOR_ADDR  0x29        /*!< slave address for BNO055 sensor */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// =============================================================================
+// CONFIGURATION CONSTANTS
+// =============================================================================
+
+#define BNO055_I2C_FREQ_HZ   400000    ///< I2C clock frequency (400 kHz)
+#define BNO055_SENSOR_ADDR   0x29      ///< I2C slave address
+
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
 
 /**
- * @brief Enumerated type for the operation mode of the BNO055 sensor
+ * @brief BNO055 operation modes
  * 
+ * The BNO055 supports multiple operation modes that control which sensors are
+ * active and whether sensor fusion is enabled.
  */
 typedef enum {
-    CONFIGMODE = 0x00,
-    ACCONLY = 0x01,
-    MAGONLY = 0x02,
-    GYROONLY = 0x03,
-    ACCMAG = 0x04,
-    ACCGYRO = 0x05,
-    MAGGYRO = 0x06,
-    AMG = 0x07,
-    IMU = 0x08,
-    COMPASS = 0x09,
-    M4G = 0x0A,
-    NDOF_FMC_OFF = 0x0B,
-    NDOF = 0x0C,
-    INIT = 0x0D
-} BNO055_OperationMode;
+    BNO055_MODE_CONFIG       = 0x00,   ///< Configuration mode (no sensors active)
+    BNO055_MODE_ACCONLY      = 0x01,   ///< Accelerometer only
+    BNO055_MODE_MAGONLY      = 0x02,   ///< Magnetometer only
+    BNO055_MODE_GYROONLY     = 0x03,   ///< Gyroscope only
+    BNO055_MODE_ACCMAG       = 0x04,   ///< Accelerometer + Magnetometer
+    BNO055_MODE_ACCGYRO      = 0x05,   ///< Accelerometer + Gyroscope
+    BNO055_MODE_MAGGYRO      = 0x06,   ///< Magnetometer + Gyroscope
+    BNO055_MODE_AMG          = 0x07,   ///< All sensors without fusion
+    BNO055_MODE_IMU          = 0x08,   ///< Fusion: Accelerometer + Gyroscope
+    BNO055_MODE_COMPASS      = 0x09,   ///< Fusion: Accelerometer + Magnetometer
+    BNO055_MODE_M4G          = 0x0A,   ///< Fusion: Accel + Gyro + Mag (no fast mag cal)
+    BNO055_MODE_NDOF_FMC_OFF = 0x0B,   ///< Fusion: NDOF without fast mag calibration
+    BNO055_MODE_NDOF         = 0x0C,   ///< Fusion: Full NDOF with all calibrations
+    BNO055_MODE_INIT         = 0x0D    ///< Internal initialization state
+} bno055_operation_mode_t;
 
 /**
- * @brief Enum power mode of the BNO055 sensor
+ * @brief BNO055 power modes
  * 
+ * Controls power consumption by enabling/disabling sensors and processing.
  */
 typedef enum {
-    NORMAL = BNO055_POWER_MODE_NORMAL,
-    LOWPOWER = BNO055_POWER_MODE_LOWPOWER,
-    SUSPEND = BNO055_POWER_MODE_SUSPEND
-} BNO055_PowerMode;
-
-
-/**
- * @brief Structure for save the actual unit of the BNO055 sensor
- * 
- */
-typedef struct {
-    uint8_t accel_unit; ///> Accelerometer unit
-    uint8_t gyro_unit; ///> Gyroscope unit
-    uint8_t euler_unit; ///> Euler unit
-    uint8_t temp_unit; ///> Temperature unit
-    uint8_t ori_unit; ///> Orientation unit
-} BNO055_UnitSettings_t;
+    BNO055_POWER_NORMAL  = BNO055_POWER_MODE_NORMAL,   ///< Normal operation (all systems active)
+    BNO055_POWER_LOW     = BNO055_POWER_MODE_LOWPOWER, ///< Low power mode (reduced sampling)
+    BNO055_POWER_SUSPEND = BNO055_POWER_MODE_SUSPEND   ///< Suspend mode (minimal power)
+} bno055_power_mode_t;
 
 /**
- * @brief Srtucture for calibration profile of the BNO055 sensor
+ * @brief BNO055 unit settings structure
  * 
- * This structure is used to save the calibration profile of the BNO055 sensor.
+ * Stores the current unit configuration for all sensor outputs.
  */
 typedef struct {
-    uint8_t sys_calib_stat; ///> System calibration status
-    uint16_t accel_offset_x; ///> Accelerometer offset X
-    uint16_t accel_offset_y; ///> Accelerometer offset Y
-    uint16_t accel_offset_z; ///> Accelerometer offset Z
-    uint16_t mag_offset_x; ///> Magnetometer offset X
-    uint16_t mag_offset_y; ///> Magnetometer offset Y
-    uint16_t mag_offset_z; ///> Magnetometer offset Z
-    uint16_t gyro_offset_x; ///> Gyroscope offset X
-    uint16_t gyro_offset_y; ///> Gyroscope offset Y
-    uint16_t gyro_offset_z; ///> Gyroscope offset Z
-    uint16_t accel_radius; ///> Accelerometer radius
-    uint16_t mag_radius; ///> Magnetometer radius
-} BNO055_CalibProfile_t;
+    uint8_t accel_unit;  ///< Accelerometer unit (0=m/s², 1=mg)
+    uint8_t gyro_unit;   ///< Gyroscope unit (0=dps, 1=rps)
+    uint8_t euler_unit;  ///< Euler angles unit (0=degrees, 1=radians)
+    uint8_t temp_unit;   ///< Temperature unit (0=Celsius, 1=Fahrenheit)
+    uint8_t ori_unit;    ///< Orientation convention (0=Windows, 1=Android)
+} bno055_unit_settings_t;
 
 /**
- * @brief Structure for the BNO055 sensor
+ * @brief BNO055 calibration profile structure
  * 
+ * Contains calibration offsets and radius values for all sensors.
+ * Can be saved and restored to skip calibration on subsequent boots.
  */
 typedef struct {
-    uart_t uart_config; ///> UART configuration structure
-    i2c_t i2c_handle;   ///< I2C handle for the BNO055 sensor
-    BNO055_OperationMode operation_mode; ///> Operation mode of the BNO055 sensor
-    BNO055_PowerMode power_mode; ///> Power mode of the BNO055 sensor
-    BNO055_UnitSettings_t unit_settings; ///> Unit settings of the BNO055 sensor
+    uint8_t  sys_calib_stat;   ///< System calibration status
+    uint16_t accel_offset_x;   ///< Accelerometer X-axis offset
+    uint16_t accel_offset_y;   ///< Accelerometer Y-axis offset
+    uint16_t accel_offset_z;   ///< Accelerometer Z-axis offset
+    uint16_t mag_offset_x;     ///< Magnetometer X-axis offset
+    uint16_t mag_offset_y;     ///< Magnetometer Y-axis offset
+    uint16_t mag_offset_z;     ///< Magnetometer Z-axis offset
+    uint16_t gyro_offset_x;    ///< Gyroscope X-axis offset
+    uint16_t gyro_offset_y;    ///< Gyroscope Y-axis offset
+    uint16_t gyro_offset_z;    ///< Gyroscope Z-axis offset
+    uint16_t accel_radius;     ///< Accelerometer calibration radius
+    uint16_t mag_radius;       ///< Magnetometer calibration radius
+} bno055_calib_profile_t;
 
-    ///> Buffer for data
-    uint8_t buffer[128]; ///> Buffer for data
-
-    ///> BNO055 sensor data
-    uint8_t chip_id; ///> Chip ID
-    uint8_t sw_rev_id[2]; ///> Software revision ID
-    uint8_t page_id; ///> Page ID
-    uint8_t accel_rev_id; ///> Accelerometer revision ID
-    uint8_t mag_rev_id; ///> Magnetometer revision ID
-    uint8_t gyro_rev_id; ///> Gyroscope revision ID
-    uint8_t bl_rev_id; ///> Bootloader revision ID
-
-    ///> Calibration data
-    uint8_t calib_stat; ///> Calibration status
-    uint8_t test_stat; ///> Self test status
-
-    ///> data
-    float yaw; ///> Yaw value
-    float pitch; ///> Pitch value
-    float roll; ///> Roll value
-
-    float ax; ///> Accelerometer X value
-    float ay; ///> Accelerometer Y value
-    float az; ///> Accelerometer Z value
-
-    float gx; ///> Gyroscope X value
-    float gy; ///> Gyroscope Y value
-    float gz; ///> Gyroscope Z value
-
-    float mx; ///> Magnetometer X value
-    float my; ///> Magnetometer Y value
-    float mz; ///> Magnetometer Z value
-
-    gpio_t rst_pin; ///> Reset pin
+/**
+ * @brief BNO055 sensor instance structure
+ * 
+ * Contains all state, configuration, and data for a BNO055 sensor instance.
+ * Initialize using bno055_init() before use.
+ * 
+ * Thread-safety: Not thread-safe. External synchronization required for
+ * concurrent access from multiple tasks.
+ */
+typedef struct {
+    // Hardware interface
+    i2c_t i2c_handle;                       ///< I2C communication handle
+    gpio_t rst_pin;                         ///< Reset pin control (optional)
     
-} BNO055_t;
+    // Configuration
+    bno055_operation_mode_t operation_mode; ///< Current operation mode
+    bno055_power_mode_t power_mode;         ///< Current power mode
+    bno055_unit_settings_t unit_settings;   ///< Unit configuration
+    
+    // Sensor identification
+    uint8_t chip_id;                        ///< Chip ID (should be 0xA0)
+    uint8_t sw_rev_id[2];                   ///< Software revision ID
+    uint8_t page_id;                        ///< Current register page
+    uint8_t accel_rev_id;                   ///< Accelerometer revision ID
+    uint8_t mag_rev_id;                     ///< Magnetometer revision ID
+    uint8_t gyro_rev_id;                    ///< Gyroscope revision ID
+    uint8_t bl_rev_id;                      ///< Bootloader revision ID
+    
+    // Calibration status
+    uint8_t calib_stat;                     ///< Calibration status register value
+    uint8_t test_stat;                      ///< Self-test status register value
+    
+    // Sensor data (Euler angles)
+    float yaw;                              ///< Heading/yaw angle
+    float pitch;                            ///< Pitch angle
+    float roll;                             ///< Roll angle
+    
+    // Sensor data (Linear acceleration)
+    float ax;                               ///< Accelerometer X-axis
+    float ay;                               ///< Accelerometer Y-axis
+    float az;                               ///< Accelerometer Z-axis
+    
+    // Sensor data (Angular velocity)
+    float gx;                               ///< Gyroscope X-axis
+    float gy;                               ///< Gyroscope Y-axis
+    float gz;                               ///< Gyroscope Z-axis
+    
+    // Sensor data (Magnetic field)
+    float mx;                               ///< Magnetometer X-axis
+    float my;                               ///< Magnetometer Y-axis
+    float mz;                               ///< Magnetometer Z-axis
+    
+    // Internal buffer
+    uint8_t buffer[128];                    ///< Communication buffer
+} bno055_t;
 
+
+// =============================================================================
+// PUBLIC API FUNCTIONS
+// =============================================================================
 
 /**
- * @brief Initialize BNO055 sensor
+ * @brief Initialize BNO055 IMU sensor
  * 
- * This function initializes the BNO055 sensor with the specified I2c (or uart) configuration.
+ * Configures I2C communication, sets default operation mode (NDOF), power mode
+ * (NORMAL), and unit settings (m/s², rad/s, radians).
  * 
- * @param bno055 Pointer to the BNO055 sensor structure
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @param[in] sda I2C SDA GPIO pin number
+ * @param[in] scl I2C SCL GPIO pin number
+ * @param[in] i2c_num I2C port number (0 or 1)
+ * @return int8_t BNO055_SUCCESS (0) on success, BNO055_ERROR (-1) on failure
+ * 
+ * @note This function must be called before any other BNO055 functions
  */
-int8_t BNO055_Init(BNO055_t *bno055, uint8_t sda, uint8_t scl, uint8_t i2c_num);
+int8_t bno055_init(bno055_t *bno055, uint8_t sda, uint8_t scl, uint8_t i2c_num);
 
 /**
- * @brief Reset the BNO055 sensor
+ * @brief Reset BNO055 sensor via I2C de-initialization
  * 
- * @param bno055 
+ * Deinitializes the I2C interface. Note: Hardware reset via RST pin is
+ * currently not implemented.
+ * 
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
  */
-void BNO055_Reset(BNO055_t *bno055);
+void bno055_reset(bno055_t *bno055);
 
 /**
- * @brief Get the calibration status of the BNO055 sensor
+ * @brief Get calibration status of all sensors
  * 
- * This function retrieves the calibration status of the BNO055 sensor
- * and returns the system, gyroscope, accelerometer, and magnetometer calibration status.
+ * Reads the calibration status register and updates the internal calibration
+ * status. Each sensor (system, gyro, accel, mag) has a 2-bit status (0-3).
  * 
- * @param bno055 Pointer to the BNO055 sensor structure
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @return int8_t BNO055_SUCCESS if fully calibrated, BNO055_ERROR otherwise
  */
-int8_t BNO055_GetCalibrationStatus(BNO055_t *bno055);
+int8_t bno055_get_calibration_status(bno055_t *bno055);
 
 /**
- * @brief Get information from the BNO055 sensor
+ * @brief Read sensor identification information
  * 
- * This function retrieves the chip ID, software revision ID, page ID, accelerometer revision ID,
- * magnetometer revision ID, gyroscope revision ID, and bootloader revision ID from the BNO055 sensor.
+ * Retrieves chip ID, revision IDs for all sensors, software version,
+ * bootloader version, and current page ID.
  * 
- * @param bno055 Pointer to the BNO055 sensor structure
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @return int8_t BNO055_SUCCESS on success, BNO055_ERROR on failure
  */
-int8_t BNO055_GetInfo(BNO055_t *bno055);
+int8_t bno055_get_info(bno055_t *bno055);
 
 /**
  * @brief Set the operation mode of the BNO055 sensor
@@ -198,162 +250,158 @@ int8_t BNO055_GetInfo(BNO055_t *bno055);
  * 
  * @param mode Mode of operation 
  */
-int8_t BNO055_SetOperationMode(BNO055_t *bno055, BNO055_OperationMode mode);
+int8_t bno055_set_operation_mode(bno055_t *bno055, bno055_operation_mode_t mode);
 
 /**
- * @brief Get the operation mode of the BNO055 sensor
+ * @brief Read Euler orientation angles
  * 
- * This function retrieves the current operation mode of the BNO055 sensor
- * and returns the yaw, pitch, and roll values.
+ * Retrieves absolute orientation as Euler angles (yaw/heading, pitch, roll)
+ * from the sensor fusion algorithm. Units depend on configuration.
  * 
- * @param yaw Pointer to a variable where the yaw value will be stored
- * @param pitch Pointer to a variable where the pitch value will be stored
- * @param roll Pointer to a variable where the roll value will be stored
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @param[out] yaw Pointer to store yaw/heading angle
+ * @param[out] pitch Pointer to store pitch angle
+ * @param[out] roll Pointer to store roll angle
  */
-void BNO055_GetEulerAngles(BNO055_t *bno055, float *yaw , float *pitch , float *roll); ///> Getorientation data ( Euler angles )
+void bno055_get_euler_angles(bno055_t *bno055, float *yaw, float *pitch, float *roll);
 
 /**
- * @brief Get the linear acceleration of the BNO055 sensor
+ * @brief Read linear acceleration data
  * 
- * This function retrieves the linear acceleration of the BNO055 sensor
- * and returns the x, y, and z values.
+ * Retrieves linear acceleration values for all three axes. Units depend on
+ * configuration (m/s² or mg).
  * 
- * @param x Pointer to a variable where the x value will be stored
- * @param y Pointer to a variable where the y value will be stored
- * @param z Pointer to a variable where the z value will be stored
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @param[out] x Pointer to store X-axis acceleration
+ * @param[out] y Pointer to store Y-axis acceleration
+ * @param[out] z Pointer to store Z-axis acceleration
  */
-void BNO055_GetAcceleration(BNO055_t *bno055, float *x, float *y, float *z);///> Get linear acceleration
+void bno055_get_acceleration(bno055_t *bno055, float *x, float *y, float *z);
 
 /**
- * @brief Get the gyroscope data of the BNO055 sensor
+ * @brief Read gyroscope angular velocity data
  * 
- * @param bno055 Structure with the BNO055 sensor data
- * @param gx Pointer to a variable where the gx value will be stored
- * @param gy Pointer to a variable where the gy value will be stored
- * @param gz Pointer to a variable where the gz value will be stored
+ * Retrieves angular velocity values for all three axes. Units depend on
+ * configuration (dps or rps).
+ * 
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @param[out] gx Pointer to store X-axis angular velocity
+ * @param[out] gy Pointer to store Y-axis angular velocity
+ * @param[out] gz Pointer to store Z-axis angular velocity
  */
-void BNO055_GetGyro(BNO055_t *bno055, float *gx , float *gy , float *gz); ///> Get gyroscope data
+void bno055_get_gyro(bno055_t *bno055, float *gx, float *gy, float *gz);
 
 /**
- * @brief Get the magnetic field of the BNO055 sensor
+ * @brief Read magnetometer magnetic field data
  * 
- * This function retrieves the magnetic field of the BNO055 sensor
- * and returns the x, y, and z values.
+ * Retrieves magnetic field strength values for all three axes in µT (microtesla).
  * 
- * @param mx Pointer to a variable where the mx value will be stored
- * @param my Pointer to a variable where the my value will be stored
- * @param mz Pointer to a variable where the mz value will be stored
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @param[out] mx Pointer to store X-axis magnetic field
+ * @param[out] my Pointer to store Y-axis magnetic field
+ * @param[out] mz Pointer to store Z-axis magnetic field
  */
-void BNO055_GetMagnetometer(BNO055_t *bno055, float *mx , float *my , float *mz);///> Get magnetometer data
+void bno055_get_magnetometer(bno055_t *bno055, float *mx, float *my, float *mz);
+
+// =============================================================================
+// LOW-LEVEL I2C COMMUNICATION FUNCTIONS
+// =============================================================================
 
 /**
- * @brief Fuctión to send data to the BNO055 sensor for UART communication
+ * @brief Write data to BNO055 register via I2C
  * 
- * @param bno055
- * @param reg Address of the register to write in HEX
- * @param data Pointer to the data to write
- * @param len Length of the data to write in bytes
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @param[in] reg Register address
+ * @param[in] data Pointer to data buffer to write
+ * @param[in] len Number of bytes to write
+ * @return int8_t BNO055_SUCCESS on success, BNO055_ERROR on failure
  */
- int8_t BN055_Write_Uart(BNO055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
+int8_t bno055_write(bno055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
 
 /**
- * @brief Fuctión to send data to the BNO055 sensor for I2C communication
+ * @brief Read data from BNO055 register via I2C
  * 
- * @param bno055
- * @param reg Address of the register to write in HEX
- * @param data Pointer to the data to write
- * @param len Length of the data to write in bytes
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @param[in] reg Register address
+ * @param[out] data Pointer to buffer to store read data
+ * @param[in] len Number of bytes to read
+ * @return int8_t BNO055_SUCCESS on success, BNO055_ERROR on failure
  */
-int8_t BN055_Write(BNO055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
+int8_t bno055_read(bno055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
 
 /**
- * @brief Function to read data from the BNO055 sensor for UART communication
+ * @brief Read all sensor data in a single operation
  * 
- * @param bno055
- * @param reg Address of the register to read in HEX
- * @param data Pointer to the data to read
- * @param len Length of the data to read in bytes
- * @param timeout_ms Timeout in milliseconds
- * @return int8_t
+ * Efficiently reads accelerometer, magnetometer, gyroscope, and Euler angle
+ * data in one I2C transaction (24 bytes total).
+ * 
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @return int8_t BNO055_SUCCESS on success, BNO055_ERROR on failure
  */
-int8_t BNO055_Read_Uart(BNO055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len, uint8_t timeout_ms);
+int8_t bno055_read_all(bno055_t *bno055);
 
 /**
- * @brief Function to read data from the BNO055 sensor for I2C communication
+ * @brief Read all sensor data using linear acceleration
  * 
- * @param bno055
- * @param reg Address of the register to read in HEX
- * @param data Pointer to the data to read
- * @param len Length of the data to read in bytes
- * @return int8_t
+ * Similar to bno055_read_all() but uses linear acceleration (gravity removed)
+ * instead of raw acceleration data.
+ * 
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @return int8_t BNO055_SUCCESS on success, BNO055_ERROR on failure
  */
- int8_t BNO055_Read(BNO055_t *bno055, uint8_t reg, uint8_t *data, uint8_t len);
+int8_t bno055_read_all_linear(bno055_t *bno055);
 
 /**
- * @brief Check the ACK value of the BNO055 sensor
+ * @brief Configure output units for all sensors
  * 
- * @param data Received data from the BNO055 sensor
- * @return int8_t 
+ * Sets the units for accelerometer, gyroscope, Euler angles, temperature,
+ * and orientation convention.
+ * 
+ * Unit options:
+ * - accel_unit: 0=m/s², 1=mg
+ * - gyro_unit: 0=dps, 1=rps
+ * - euler_unit: 0=degrees, 1=radians
+ * - temp_unit: 0=Celsius, 1=Fahrenheit
+ * - ori_unit: 0=Windows, 1=Android
+ * 
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @param[in] accel_unit Accelerometer unit selection
+ * @param[in] gyro_unit Gyroscope unit selection
+ * @param[in] euler_unit Euler angle unit selection
+ * @param[in] temp_unit Temperature unit selection
+ * @param[in] ori_unit Orientation convention selection
+ * @return int8_t BNO055_SUCCESS on success, BNO055_ERROR on failure
  */
-int8_t BNO055_CheckAck(uint8_t *data);
+int8_t bno055_set_unit(bno055_t *bno055, uint8_t accel_unit, uint8_t gyro_unit, 
+                       uint8_t euler_unit, uint8_t temp_unit, uint8_t ori_unit);
 
 /**
- * @brief Read all data from the BNO055 sensor with I2C (or uart)
+ * @brief Set power mode
  * 
- * @param bno055
- * @return int8_t 
+ * Controls power consumption by enabling/disabling sensors and processing.
+ * 
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @param[in] mode Power mode to set
+ * @return int8_t BNO055_SUCCESS on success, BNO055_ERROR on failure
  */
-int8_t BNO055_ReadAll(BNO055_t *bno055);
+int8_t bno055_set_power_mode(bno055_t *bno055, bno055_power_mode_t mode);
 
 /**
- * @brief Read all data from the BNO055 sensor with I2C (or uart) with Lineal Acceleration
+ * @brief Read complete calibration profile
  * 
- * @param bno055
- * @return int8_t 
+ * Retrieves all calibration offsets and radius values for accelerometer,
+ * magnetometer, and gyroscope. Can be saved and restored to skip calibration.
+ * 
+ * @param[in,out] bno055 Pointer to BNO055 sensor instance
+ * @param[out] calib_data Pointer to structure to store calibration data
+ * @return int8_t BNO055_SUCCESS on success, BNO055_ERROR on failure
+ * 
+ * @note Sensor must be fully calibrated before calling this function
  */
-int8_t BNO055_ReadAll_Lineal(BNO055_t *bno055);
+int8_t bno055_get_calibration_profile(bno055_t *bno055, bno055_calib_profile_t *calib_data);
 
-/**
- * @brief Set the unit of the BNO055 sensor
- * 
- * ## Bit Values:
- * 
- * Bit 0 Acceleration unit (0: m/s^2, 1: mg)
- * Bit 1 Angular rate unit (0: dps, 1: rps)
- * Bit 2 Euler unit (0: degrees, 1: radians)
- * Bit 4 Temperature unit (0: Celsius, 1: Fahrenheit)
- * Bit 7 Orientation unit (0: Windows, 1: Android)
- * 
- * @param bno055 
- * @param unit  Bit value for the unit
- * @return uint8_t 
- */
-int8_t BNO055_SetUnit(BNO055_t *bno055, uint8_t accel_unit, uint8_t gyro_unit, uint8_t euler_unit, uint8_t temp_unit, uint8_t ori_unit);
+#ifdef __cplusplus
+}
+#endif
 
-/**
- * @brief Set the power mode of the BNO055 sensor
- * 
- * @param bno055 
- * @param mode 
- * @return int8_t 
- */
-int8_t BNO055_SetPowerMode(BNO055_t *bno055, BNO055_PowerMode mode);
-
-/**
- * @brief Coverting the data from the BNO055 sensor to the correct units
- * 
- */
-void BNO055_ConvertData(BNO055_t *bno055);
-
-/**
- * @brief Get the calibration profile of the BNO055 sensor
- * 
- * This function retrieves the calibration profile of the BNO055 sensor
- * and returns the system, gyroscope, accelerometer, and magnetometer calibration offsets and radius.
- * 
- * @param bno055 Pointer to the BNO055 sensor structure
- * @param calib_data Pointer to the calibration profile structure
- */
-int8_t BNO055_GetCalibrationProfile(BNO055_t *bno055, BNO055_CalibProfile_t *calib_data);
-
-#endif ///> BNO055_H
+#endif // BNO055_H
