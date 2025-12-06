@@ -203,7 +203,7 @@ void task_read_sensors(void *pvParameters)
     
     // Initialize angular velocity computation state for each encoder
     for (int i = 0; i < 3; i++) {
-        encoder_state[i].last_angle_deg = as5600_adc_get_angle(&g_as5600[i]);
+        encoder_state[i].last_angle_deg = as5600_read_angle_adc(&g_as5600[i]);
         encoder_state[i].last_time_us = now_us;
         kalman_init(&kalman_filters[i], SENSOR_KALMAN_Q, SENSOR_KALMAN_R);
     }
@@ -228,7 +228,7 @@ void task_read_sensors(void *pvParameters)
         
         if (xSemaphoreTake(g_adc_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             for (int i = 0; i < 3; i++) {
-                angle_deg[i] = as5600_adc_get_angle(&g_as5600[i]);
+                angle_deg[i] = as5600_read_angle_adc(&g_as5600[i]);
             }
             xSemaphoreGive(g_adc_mutex);
         } else {

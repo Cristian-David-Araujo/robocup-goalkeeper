@@ -17,15 +17,16 @@ int init_sensors(void)
     // AS5600 MAGNETIC ENCODER CONFIGURATION
     // ==========================================================================
     
-    // Configure output pins for analog reading mode
-    g_as5600[0].out = GPIO_ENCODER_0_IN_ANALOG;
-    g_as5600[0].conf.OUTS = AS5600_OUTPUT_STAGE_ANALOG_RR;  // Analog 10%-90% range
+    // Configure AS5600 encoder output pins and analog mode
+    // Note: AS5600 sensors are read via analog OUT pin (ADC), not I2C in this application
+    g_as5600[0].out_pin = GPIO_ENCODER_0_IN_ANALOG;
+    g_as5600[0].config.OUTS = AS5600_OUTPUT_STAGE_ANALOG_RR;  // Analog 10%-90% range
     
-    g_as5600[1].out = GPIO_ENCODER_1_IN_ANALOG;
-    g_as5600[1].conf.OUTS = AS5600_OUTPUT_STAGE_ANALOG_RR;
+    g_as5600[1].out_pin = GPIO_ENCODER_1_IN_ANALOG;
+    g_as5600[1].config.OUTS = AS5600_OUTPUT_STAGE_ANALOG_RR;
     
-    g_as5600[2].out = GPIO_ENCODER_2_IN_ANALOG;
-    g_as5600[2].conf.OUTS = AS5600_OUTPUT_STAGE_ANALOG_RR;
+    g_as5600[2].out_pin = GPIO_ENCODER_2_IN_ANALOG;
+    g_as5600[2].config.OUTS = AS5600_OUTPUT_STAGE_ANALOG_RR;
 
     // Create shared ADC unit for all encoders
     if (!adc_create_unit(&g_shared_adc_handle)) {
@@ -33,9 +34,12 @@ int init_sensors(void)
         return INIT_ERROR_AS5600;
     }
 
-    // Initialize each AS5600 encoder with shared ADC
+    // Initialize ADC channels for each AS5600 encoder
     for (int i = 0; i < 3; i++) {
-        as5600_init_adc_shared(&g_as5600[i], g_shared_adc_handle);
+        if (!as5600_init_adc_shared(&g_as5600[i], g_shared_adc_handle)) {
+            ESP_LOGE(TAG, "Failed to initialize ADC for encoder %d", i);
+            return INIT_ERROR_AS5600;
+        }
     }
     
     ESP_LOGI(TAG, "AS5600 encoders initialized successfully");
