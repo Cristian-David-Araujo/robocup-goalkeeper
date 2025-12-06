@@ -96,6 +96,10 @@ SemaphoreHandle_t g_estimated_data_mutex = NULL;
 
 TaskHandle_t g_task_sensor_handle = NULL;
 TaskHandle_t g_task_control_handle = NULL;
+extern TaskHandle_t g_task_ik_handle;  // Defined in task_inverse_kinematics.c
+extern TaskHandle_t g_task_velocity_control_handle;  // Defined in task_velocity_control.c
+TaskHandle_t g_task_trajectory_handle = NULL;  // Disabled when using WiFi control
+TaskHandle_t g_task_wifi_comm_handle = NULL;
 TaskHandle_t g_handle_parser_task = NULL;
 
 // =============================================================================
@@ -107,6 +111,7 @@ void task_motor_control(void *pvParameters);
 void task_inverse_kinematics(void *pvParameters);
 void task_velocity_control(void *pvParameters);
 void task_move_trajectory(void *pvParameters);
+void task_wifi_comm(void *pvParameters);
 
 // =============================================================================
 // APPLICATION MAIN ENTRY POINT
@@ -264,20 +269,38 @@ void app_main(void)
     }
     ESP_LOGI(TAG, "  ✓ Velocity control task created (priority 4)");
     
-    // Trajectory generation task (3)
+    // ===== TRAJECTORY OR WIFI CONTROL (MUTUALLY EXCLUSIVE) =====
+    // Uncomment ONE of the following task creation blocks:
+    
+    // Option 1: Autonomous trajectory generation (3)
+    // xReturned = xTaskCreate(
+    //     task_move_trajectory,
+    //     "MoveTask",
+    //     4096,
+    //     NULL,
+    //     3,
+    //     &g_task_trajectory_handle
+    // );
+    // if (xReturned != pdPASS) {
+    //     ESP_LOGE(TAG, "Failed to create trajectory task");
+    //     return;
+    // }
+    // ESP_LOGI(TAG, "  ✓ Trajectory task created (priority 3)");
+    
+    // Option 2: WiFi remote control (3) - CURRENTLY ACTIVE
     xReturned = xTaskCreate(
-        task_move_trajectory,
-        "MoveTask",
-        4096,  // Increased from 2048 to prevent stack overflow
+        task_wifi_comm,
+        "WiFiCommTask",
+        4096,
         NULL,
         3,
-        &g_task_trajectory_handle
+        &g_task_wifi_comm_handle
     );
     if (xReturned != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create move task");
+        ESP_LOGE(TAG, "Failed to create WiFi communication task");
         return;
     }
-    ESP_LOGI(TAG, "  ✓ Trajectory task created (priority 3)");
+    ESP_LOGI(TAG, "  ✓ WiFi communication task created (priority 3)");
     
     // Motor control task (2) - inner PID loop
     xReturned = xTaskCreate(
@@ -297,10 +320,10 @@ void app_main(void)
     ESP_LOGI(TAG, "==============================================");
     ESP_LOGI(TAG, "All tasks created successfully");
     ESP_LOGI(TAG, "Task Communication Architecture:");
-    ESP_LOGI(TAG, "  Trajectory → Vel Control: Queue (desired velocity)");
+    ESP_LOGI(TAG, "  WiFi Comm → Vel Control: Queue (remote velocity commands)");
     ESP_LOGI(TAG, "  Vel Control → IK: Queue (corrected velocity)");
     ESP_LOGI(TAG, "  IK → Control: Queue (wheel targets)");
     ESP_LOGI(TAG, "  Sensor ↔ Tasks: Mutexes (shared data)");
     ESP_LOGI(TAG, "==============================================");
-    ESP_LOGI(TAG, "System running...");
+    ESP_LOGI(TAG, "System running with WiFi remote control...");
 }

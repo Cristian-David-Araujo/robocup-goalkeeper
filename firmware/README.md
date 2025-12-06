@@ -1,6 +1,6 @@
 # RoboCup Goalkeeper Firmware
 
-**Version:** 1.0  
+**Version:** 2.0  
 **Platform:** ESP32-S3  
 **RTOS:** FreeRTOS (via ESP-IDF)
 
@@ -28,6 +28,7 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
 - **Closed-loop motor control** with PID feedback
 - **Sensor fusion** from magnetic encoders
 - **Real-time kinematics** (forward and inverse transformations)
+- **WiFi remote control** for wireless velocity commands
 - **Multi-task architecture** using FreeRTOS for concurrent operation
 - **Thread-safe data sharing** via mutexes
 
@@ -37,6 +38,7 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
 - ✅ Three AS5600 magnetic encoders for position/velocity feedback
 - ✅ Kalman filtering for noise reduction
 - ✅ Omnidirectional motion control
+- ✅ WiFi remote control via UDP for wireless velocity commands
 - ✅ Modular, maintainable architecture
 - ✅ Comprehensive documentation and error handling
 
@@ -47,11 +49,14 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
 ### High-Level Block Diagram
 
 ```
-┌──────────────────┐
-│  Trajectory Gen  │  ← Generates desired robot velocity
-└────────┬─────────┘
-         │ (vx_des, vy_des, wz_des)
-         ↓
+┌──────────────────┐       ┌──────────────────┐
+│  Trajectory Gen  │  OR   │   WiFi Control   │  ← Velocity command source
+│   (Autonomous)   │       │    (Remote)      │     (only one active)
+└────────┬─────────┘       └────────┬─────────┘
+         │                          │
+         └──────────┬───────────────┘
+                    │ (vx_des, vy_des, wz_des)
+                    ↓
 ┌──────────────────┐
 │ Velocity PID     │  ← Corrects tracking errors (OUTER LOOP)
 │ Control (vx,vy,wz)│
@@ -90,23 +95,23 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
 ┌────────────────────────────────────────────────────────────┐
 │                   FreeRTOS Scheduler                       │
 └────────────────────────────────────────────────────────────┘
-         │        │          │          │          │
-         ↓        ↓          ↓          ↓          ↓
-    ┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐
-    │Sensor  ││  IK    ││ Vel    ││ Traj   ││ Motor  │
-    │Task    ││ Task   ││ PID    ││ Task   ││ PID    │
-    │(P=6)   ││ (P=5)  ││ Task   ││ (P=3)  ││ Task   │
-    │        ││        ││ (P=4)  ││        ││ (P=2)  │
-    └───┬────┘└───┬────┘└───┬────┘└───┬────┘└───┬────┘
-        │         │         │         │         │
-        │         │   Queue │   Queue │   Queue │
-        │         │    ↓    │    ↓    │    ↓    │
-        │    ┌────────┐ ┌────────┐ ┌────────┐  │
-        │    │velocity│ │desired │ │ wheel  │  │
-        │    │command │ │velocity│ │targets │  │
-        │    └────────┘ └────────┘ └────────┘  │
-        │         Mutex      Mutex      Mutex   │
-        ├──────────┴──────────┴────────────┴───┤
+         │        │          │          │          │          │
+         ↓        ↓          ↓          ↓          ↓          ↓
+    ┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐┌────────┐
+    │Sensor  ││  IK    ││ Vel    ││ Traj   ││ Motor  ││ WiFi   │
+    │Task    ││ Task   ││ PID    ││ Task   ││ PID    ││ Comm   │
+    │(P=6)   ││ (P=5)  ││ Task   ││ (P=3)  ││ Task   ││ Task   │
+    │        ││        ││ (P=4)  ││        ││ (P=2)  ││ (P=3)  │
+    └───┬────┘└───┬────┘└───┬────┘└───┬────┘└───┬────┘└───┬────┘
+        │         │         │         │         │         │
+        │         │   Queue │   Queue │   Queue │   Queue │
+        │         │    ↓    │    ↓    │    ↓    │    ↓    │
+        │    ┌────────┐ ┌────────┐ ┌────────┐  │    ┌────────┐
+        │    │velocity│ │desired │ │ wheel  │  │    │desired │
+        │    │command │ │velocity│ │targets │  │    │velocity│
+        │    └────────┘ └────────┘ └────────┘  │    │(WiFi)  │
+        │         Mutex      Mutex      Mutex   │    └────────┘
+        ├──────────┴──────────┴────────────┴───┼────────┘
         ↓                                       ↓
    ┌──────────────────────────────────────────────────┐
    │          Shared Resources (Mutex-Protected)       │
@@ -117,6 +122,7 @@ This firmware controls a three-wheeled omnidirectional robot for RoboCup goalkee
 
 **Communication Patterns:**
 - **Trajectory → Velocity PID:** Queue-based (desired velocity commands)
+- **WiFi Comm → Velocity PID:** Queue-based (remote velocity commands)
 - **Velocity PID → IK:** Queue-based (corrected velocity commands)
 - **IK → Motor PID:** Queue-based (wheel speed targets)
 - **Sensor → Velocity PID:** Mutex-protected (measured robot velocity)
@@ -185,7 +191,8 @@ firmware/
 │   ├── task_motor_control.c          # Motor PID control (inner loop)
 │   ├── task_inverse_kinematics.c     # IK computation
 │   ├── task_velocity_control.c       # Velocity PID (outer loop)
-│   └── task_move_trajectory.c        # Trajectory generation
+│   ├── task_move_trajectory.c        # Trajectory generation
+│   └── task_wifi_comm.c              # WiFi remote control
 ├── src/
 │   ├── motor.c             # Motor driver implementation
 │   ├── pid.c               # PID controller implementation
@@ -197,11 +204,14 @@ firmware/
 │   ├── pid.h               # PID controller interface
 │   ├── kinematics.h        # Kinematics interface
 │   ├── as5600.h            # Encoder interface
-│   └── bno055.h            # IMU interface
+│   ├── bno055.h            # IMU interface
+│   └── wifi_control.h      # WiFi control interface
 ├── utils/
 │   ├── types_utils.h       # Common type definitions
 │   ├── config_utils.h      # Configuration constants
-│   └── gpio_utils.h        # GPIO pin assignments
+│   ├── gpio_utils.h        # GPIO pin assignments
+│   ├── wifi_control.c      # WiFi utility functions
+│   └── shared_data.c       # Shared data management
 └── CMakeLists.txt          # Build configuration
 ```
 
@@ -266,12 +276,13 @@ firmware/
 
 ### 2. Trajectory Generation Task (`task_move_trajectory`)
 
-**Purpose:** Generates desired robot velocity commands
+**Purpose:** Generates desired robot velocity commands for autonomous operation
 
 **Characteristics:**
 - **Priority:** 3 (medium-low)
 - **Period:** 20 ms
 - **Stack:** 2048 bytes
+- **Status:** ⚠️ **Should be disabled when using WiFi remote control** (both tasks share same output queue)
 
 **Responsibilities:**
 1. Compute desired velocities (currently: circular trajectory)
@@ -284,6 +295,8 @@ firmware/
 - **Timeout:** 5ms for queue send, continues on failure
 
 **Rationale:** Queue-based output decouples trajectory generation from control. Lowest priority among control tasks since it generates references, not real-time feedback.
+
+**Note:** Disable this task in `main.c` when using WiFi control to avoid conflicting commands.
 
 ---
 
@@ -359,6 +372,43 @@ firmware/
 - **Error Handling:** Uses previous values on timeout, logs warnings
 
 **Rationale:** Lower priority acceptable because inner-loop PID maintains last setpoint. Fast period (2ms) ensures stable control. Cascaded architecture allows this task to focus solely on wheel speed regulation.
+
+---
+
+### 6. WiFi Communication Task (`task_wifi_comm`)
+
+**Purpose:** Wireless remote control via WiFi for receiving velocity commands (replaces autonomous trajectory generation)
+
+**Characteristics:**
+- **Priority:** 3 (medium-low, same as trajectory)
+- **Period:** 50 ms
+- **Stack:** 4096 bytes
+- **Status:** ⚠️ **Mutually exclusive with Trajectory task** (disable trajectory when using WiFi control)
+
+**Responsibilities:
+1. Connect to WiFi network and maintain connection
+2. Create UDP socket for receiving commands
+3. Parse incoming velocity commands (JSON or binary format)
+4. Validate commands (checksum, range limits, timeout)
+5. Send validated velocity commands to velocity control task
+6. Monitor connection status and handle reconnections
+
+**Communication:**
+- **Outputs:** `g_desired_velocity_queue` (sends to Velocity Control task)
+- **Protocol:** UDP on port 3333 (configurable)
+- **Format:** JSON `{"vx":0.5,"vy":0.3,"wz":0.1}` or 18-byte binary packet
+- **Timeout:** 1000ms command timeout triggers safety stop
+
+**Features:**
+- **Auto-reconnect:** Automatically reconnects on WiFi loss
+- **Safety:** Command timeout stops robot if connection lost
+- **Validation:** Range clamping, checksum verification (binary mode)
+- **Low latency:** UDP reduces network overhead
+- **Configurable:** SSID, password, port in `config_utils.h`
+
+**Rationale:** Same priority as trajectory task since both generate velocity references. WiFi task replaces trajectory generation when remote control is active. 50ms period balances responsiveness with network efficiency.
+
+**See also:** `WIFI_VECTOR_CONTROL.md` for detailed protocol specification and usage examples.
 
 ---
 
@@ -714,6 +764,25 @@ All configuration constants are centralized in `utils/config_utils.h`:
 #define SENSOR_KALMAN_R 10.0f        // Measurement noise
 ```
 
+#### WiFi Control
+```c
+#define WIFI_CONTROL_SSID "RoboCup_Network"      // WiFi network SSID
+#define WIFI_CONTROL_PASSWORD "robocup2024"      // WiFi network password
+#define WIFI_CONTROL_PORT 3333                   // UDP port for commands
+#define WIFI_CONTROL_BUFFER_SIZE 256             // UDP receive buffer size
+#define WIFI_CONTROL_TIMEOUT_MS 1000             // Command timeout (safety stop)
+#define WIFI_MAX_LINEAR_VEL 1.0f                 // Max linear velocity (m/s)
+#define WIFI_MAX_ANGULAR_VEL 2.0f                // Max angular velocity (rad/s)
+```
+
+**WiFi Control Usage:**
+- Send JSON commands: `{"vx":0.5,"vy":0.3,"wz":0.1}` via UDP to port 3333
+- Velocity units: vx/vy in m/s, wz in rad/s
+- Commands clamped to configured limits
+- Robot stops automatically if no command received within timeout
+- ⚠️ **Important:** Disable `task_move_trajectory` in `main.c` when using WiFi control
+- See `WIFI_VECTOR_CONTROL.md` for detailed protocol documentation
+
 ### GPIO Pin Assignments
 
 Pin mappings are defined in `utils/gpio_utils.h`. Update these if hardware changes:
@@ -855,6 +924,19 @@ int function_name(int input, int *output);
 - ✅ Monitor stack usage: `idf.py monitor` (stack watermarks)
 - ✅ Ensure mutexes are always released
 
+### WiFi Connection Issues
+
+- ✅ Verify SSID and password in `config_utils.h` match your network
+- ✅ Check WiFi router is on and in range
+- ✅ Monitor serial output for connection status messages
+- ✅ Ensure router supports 2.4GHz (ESP32-S3 doesn't support 5GHz)
+- ✅ Check firewall/router settings allow UDP traffic on port 3333
+- ✅ Test UDP commands with netcat: `echo '{"vx":0.1,"vy":0,"wz":0}' | nc -u <ESP32_IP> 3333`
+- ✅ Verify JSON format is correct (no spaces, all fields present)
+- ✅ Check for command timeout (robot stops after 1000ms without commands)
+- ✅ Inspect WiFi task logs for parse errors or validation failures
+- ✅ **Ensure trajectory task is disabled** in `main.c` to prevent conflicting commands
+
 ---
 
 ## License
@@ -875,5 +957,5 @@ int function_name(int input, int *output);
 ---
 
 **Last Updated:** November 2025  
-**Firmware Version:** 1.0  
+**Firmware Version:** 2.0  
 **Maintained by:** [Your team name]
