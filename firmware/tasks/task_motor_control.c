@@ -123,7 +123,7 @@ void task_motor_control(void *pvParameters)
             if (no_target_count == 50 && !targets_received) {
                 ESP_LOGW(TAG, "No wheel targets received yet");
             } else if (targets_received && no_target_count % 500 == 0) {
-                ESP_LOGW(TAG, "No new wheel targets for %d cycles", no_target_count);
+                ESP_LOGW(TAG, "No new wheel targets for %" PRIu32 " cycles", no_target_count);
             }
         }
 

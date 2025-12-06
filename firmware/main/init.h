@@ -44,7 +44,7 @@ extern "C" {
 // =============================================================================
 
 /// @brief Array of AS5600 encoder instances (one per motor)
-extern AS5600_t g_as5600[3];
+extern as5600_t g_as5600[3];
 
 /// @brief BNO055 IMU sensor instance
 extern bno055_t g_bno055;

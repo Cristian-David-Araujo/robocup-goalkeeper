@@ -1,301 +1,438 @@
 /**
- * \file        as5600.h
- * \brief       AS5600 library
- * \details
+ * @file as5600.h
+ * @brief AS5600 magnetic position sensor driver for ESP32-S3
  * 
- *          About the OUT pin in the AS5600 sensor:
- * The ADC of the ESP32 is connected to the OUT pin of the AS5600 sensor.
- * The OUT pin can be configured to output a 10%-90% (VCC) analog signal.
- * Since the ESP32 ADC can only read 0-3.3V, the VCC of the AS5600 sensor must be 3.3V.
- * But there is another problem. The characteristic graft of the ADC (Voltage vs. Digital Value) is not linear on all
- * the range (0-3.3V). It is linear only on the 5%-90% range, aproximately.
- * That is why the OUT pin must be configured to output a 10%-90% signal.
+ * Driver for the AMS AS5600 12-bit magnetic rotary position sensor with I2C interface.
+ * Supports angle measurement via I2C digital interface and analog OUT pin via ADC.
  * 
- * \author      MaverickST
- * \version     0.0.4
- * \date        05/10/2024
- * \copyright   Unlicensed
+ * Key Features:
+ * - 12-bit angular position measurement (0.088° resolution)
+ * - Contactless 360° absolute angle measurement
+ * - Programmable zero position and maximum angle
+ * - Analog output (10%-90% VCC) and digital output via I2C
+ * - Automatic Gain Control (AGC) for optimal magnet distance
+ * - Permanent angle programming capability (BURN commands)
+ * 
+ * Hardware Configuration:
+ * - I2C Address: 0x36 (fixed)
+ * - I2C Clock: 400 kHz (Fast mode)
+ * - VCC: 3.3V (required for ESP32 ADC compatibility)
+ * - OUT Pin: Analog 10%-90% range (matches ESP32 ADC linear range)
+ * 
+ * Thread-safety: Not thread-safe. External synchronization required if
+ * sensor instances are accessed from multiple tasks.
+ * 
+ * @note All identifiers follow snake_case naming convention
+ * @note ADC reading requires OUT pin configured for analog output (10%-90%)
+ * 
+ * @author  MaverickST (original), Refactored for consistency
+ * @version 1.0.0
+ * @date    December 2024
  */
 
-#ifndef __AS5600_H__
-#define __AS5600_H__
+#ifndef AS5600_H
+#define AS5600_H
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
 
 #include "as5600_defs.h"
 #include "platform_esp32s3.h"
 
-#define VCC_3V3_MV          3300        /*!< VCC in mV */
-#define VCC_3V3_MIN_RR_MV   330         /*!< VCC minimum range in mV -> 10% of VCC */
-#define VCC_3V3_MAX_RR_MV   2970        /*!< VCC maximum range in mV -> 90% of VCC */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#define MAP(val, in_min, in_max, out_min, out_max) ((val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min) /*!< Map function */
-#define ADC_TO_VOLTAGE(val) MAP(val, 0, AS5600_ADC_RESOLUTION_12_BIT, 0, VCC_3V3_MV) /*!< ADC to voltage conversion */
-#define LIMIT(a, min, max) (a < min ? min : (a > max ? max : a)) /*!< Limit a value between min and max */
+// =============================================================================
+// CONSTANTS AND MACROS
+// =============================================================================
 
-#define I2C_MASTER_FREQ_HZ  400*1000    /*!< I2C master clock frequency */
-#define AS5600_SENSOR_ADDR  0x36        /*!< slave address for AS5600 sensor */
+#define AS5600_I2C_ADDR         0x36        ///< AS5600 I2C slave address (fixed)
+#define AS5600_I2C_FREQ_HZ      400000      ///< I2C clock frequency (400 kHz Fast mode)
 
-typedef struct
-{
-    AS5600_config_t conf; ///< AS5600 configuration
-    AS5600_reg_t reg;
-    uint8_t out;         ///< GPIO pin connected to the OUT pin of the AS5600 sensor
+#define AS5600_VCC_MV           3300        ///< VCC voltage in millivolts
+#define AS5600_VCC_MIN_MV       330         ///< OUT pin minimum voltage (10% of VCC)
+#define AS5600_VCC_MAX_MV       2970        ///< OUT pin maximum voltage (90% of VCC)
 
-    // Peripheral handles
-    i2c_t i2c_handle;   ///< I2C handle for the AS5600 sensor
-    adc_t adc_handle;   ///< ADC handle for the OUT pin
-    gpio_t gpio_handle; ///< GPIO handle for the OUT pin
+#define AS5600_ANGLE_MAX        4095        ///< Maximum 12-bit angle value
+#define AS5600_DEGREES_MAX      360.0f      ///< Maximum angle in degrees
 
-} AS5600_t;
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
 
 /**
- * @brief Initialize the I2C master driver
+ * @brief AS5600 sensor instance structure
  * 
- * @param i2c_num I2C port number
+ * Contains all configuration and peripheral handles for an AS5600 sensor.
+ * Opaque to users - access only through API functions.
  */
-void AS5600_Init(AS5600_t *as5600, i2c_port_t i2c_num, uint8_t scl, uint8_t sda, uint8_t out);
+typedef struct {
+    as5600_config_t config;     ///< Current sensor configuration
+    as5600_reg_t last_reg;      ///< Last accessed register (for string conversion)
+    uint8_t out_pin;            ///< GPIO pin number for OUT (analog) signal
+    
+    // Platform peripheral handles
+    i2c_t i2c;                  ///< I2C bus handle
+    adc_t adc;                  ///< ADC handle for OUT pin
+    gpio_t gpio;                ///< GPIO handle for OUT pin control
+} as5600_t;
+
+// =============================================================================
+// INITIALIZATION AND CONFIGURATION
+// =============================================================================
 
 /**
- * @brief Deinitialize the I2C master driver
+ * @brief Initialize AS5600 sensor with I2C communication
+ *
+ * Configures I2C bus for communication with AS5600 sensor. The OUT pin is
+ * stored but not configured - call as5600_init_adc() or as5600_init_gpio()
+ * separately based on desired OUT pin function.
+ *
+ * @param[in,out] sensor    Pointer to AS5600 instance structure
+ * @param[in]     i2c_port  I2C port number (I2C_NUM_0 or I2C_NUM_1)
+ * @param[in]     scl_pin   GPIO pin for I2C SCL
+ * @param[in]     sda_pin   GPIO pin for I2C SDA
+ * @param[in]     out_pin   GPIO pin connected to AS5600 OUT signal
  * 
+ * @return true on success, false on failure
+ * 
+ * @note After initialization, configure OUT pin function:
+ *       - as5600_init_adc() for analog angle reading
+ *       - as5600_init_gpio() for calibration/programming mode
  */
-void AS5600_Deinit(AS5600_t *as5600);
+bool as5600_init(as5600_t *sensor, i2c_port_t i2c_port, 
+                 uint8_t scl_pin, uint8_t sda_pin, uint8_t out_pin);
 
 /**
- * @brief Get angle in degrees from the AS5600 sensor by ADC.
- * Also take into account the range of the OUT pin of the AS5600 sensor, which is 10%-90% of VCC.
- * 
- * @param as5600 
+ * @brief Deinitialize AS5600 sensor and free resources
+ *
+ * Releases I2C, ADC, and GPIO resources associated with the sensor.
+ *
+ * @param[in] sensor Pointer to AS5600 instance
  */
-float AS5600_ADC_GetAngle(AS5600_t *as5600);
+void as5600_deinit(as5600_t *sensor);
 
 /**
- * @brief The host microcontroller can perform a permanent programming of ZPOS and MPOS with a BURN_ANGLE command.
- * To perform a BURN_ANGLE command, write the value 0x80 into register 0xFF. 
- * The BURN_ANGLE command can be executed up to 3 times
- * ZMCO shows how many times ZPOS and MPOS have been permanently written. 
- * This command may only be executed if the presence of the magnet is detected (MD = 1).
+ * @brief Initialize ADC for analog OUT pin reading
+ *
+ * Configures ADC channel for reading analog angle output from OUT pin.
+ * Enables as5600_read_angle_adc() function.
+ *
+ * @param[in,out] sensor Pointer to AS5600 instance
+ * @return true on success, false on failure
  * 
- * @param as5600 
+ * @note Requires AS5600 OUTS configuration set to analog mode (10%-90%)
  */
-void AS5600_BurnAngleCommand(AS5600_t *as5600);
+bool as5600_init_adc(as5600_t *sensor);
 
 /**
- * @brief The host microcontroller can perform a permanent writing of MANG and CONFIG with a BURN_SETTING command. 
- * To perform a BURN_SETTING command, write the value 0x40 into register 0xFF. 
- * MANG can be written only if ZPOS and MPOS have never been permanently written (ZMCO = 00). 
- * The BURN_ SETTING command can be performed only one time.
- * 
- * @param as5600 
+ * @brief Initialize ADC using shared ADC unit handle
+ *
+ * Alternative ADC initialization when multiple channels share same ADC unit.
+ * Use when ADC unit is already initialized elsewhere.
+ *
+ * @param[in,out] sensor        Pointer to AS5600 instance
+ * @param[in]     shared_handle Existing ADC unit handle
+ * @return true on success, false on failure
  */
-void AS5600_BurnSettingCommand(AS5600_t *as5600);
+bool as5600_init_adc_shared(as5600_t *sensor, adc_oneshot_unit_handle_t shared_handle);
 
 /**
- * @brief Convert register string to register address
- * 
- * @param reg_str Register string
- * @return as5600_reg_t Register address
+ * @brief Deinitialize ADC channel
+ *
+ * @param[in] sensor Pointer to AS5600 instance
  */
-AS5600_reg_t AS5600_RegStrToAddr(AS5600_t *as5600, const char *reg_str);
-
-// --------------------------------------------------------------
-// ------------------ GPIO and ADC FUNCTIONS --------------------
-// --------------------------------------------------------------
+void as5600_deinit_adc(as5600_t *sensor);
 
 /**
- * @brief Initialize the ADC driver
+ * @brief Initialize GPIO for OUT pin control
+ *
+ * Configures OUT pin as GPIO output for sensor calibration or programming.
+ * Initially sets pin LOW (programming mode).
+ *
+ * @param[in,out] sensor Pointer to AS5600 instance
+ * @return true on success, false on failure
  * 
- * @param as5600 
+ * @note Used during BURN operations or sensor programming
  */
-void AS5600_InitADC(AS5600_t *as5600);
+bool as5600_init_gpio(as5600_t *sensor);
 
 /**
- * @brief Initialize the ADC driver with a shared handle
- * 
- * @param as5600 
- * @param shared_handle Shared ADC handle
+ * @brief Deinitialize GPIO
+ *
+ * @param[in] sensor Pointer to AS5600 instance
  */
-void AS5600_InitADC_2(AS5600_t *as5600, adc_oneshot_unit_handle_t shared_handle);
+void as5600_deinit_gpio(as5600_t *sensor);
 
 /**
- * @brief Deinitialize the ADC driver
- * 
- * @param as5600 
+ * @brief Set GPIO OUT pin state
+ *
+ * Controls OUT pin when configured as GPIO. Used for calibration or
+ * entering programming mode.
+ *
+ * @param[in] sensor Pointer to AS5600 instance
+ * @param[in] level  Desired pin level (0=LOW, 1=HIGH)
  */
-void AS5600_DeinitADC(AS5600_t *as5600);
+void as5600_set_gpio(as5600_t *sensor, uint8_t level);
+
+// =============================================================================
+// ANGLE MEASUREMENT
+// =============================================================================
 
 /**
- * @brief Initialize the GPIO driver
+ * @brief Read angle from AS5600 via ADC (analog OUT pin)
+ *
+ * Reads analog voltage from OUT pin and converts to angle in degrees.
+ * Requires:
+ * - ADC initialized via as5600_init_adc()
+ * - AS5600 configured for analog output (OUTS = 10%-90%)
+ *
+ * The OUT pin voltage range (10%-90% of VCC) matches ESP32 ADC linear
+ * operating range for accurate measurements.
+ *
+ * @param[in] sensor Pointer to AS5600 instance
+ * @return Angle in degrees (0.0-360.0), or -1.0 on error
  * 
- * @param as5600 
+ * @note Returns -1.0 if ADC not calibrated or sensor not in analog mode
  */
-void AS5600_InitGPIO(AS5600_t *as5600);
+float as5600_read_angle_adc(as5600_t *sensor);
 
 /**
- * @brief Deinitialize the GPIO driver
- * 
- * @param as5600 
+ * @brief Read raw angle register via I2C
+ *
+ * Reads unscaled 12-bit angle from RAW ANGLE register (0x0C).
+ * This is the measured angle before zero position and maximum angle scaling.
+ *
+ * @param[in]  sensor    Pointer to AS5600 instance
+ * @param[out] raw_angle Pointer to receive 12-bit raw angle value
+ * @return true on success, false on I2C error
  */
-void AS5600_DeinitGPIO(AS5600_t *as5600);
+bool as5600_get_raw_angle(as5600_t *sensor, uint16_t *raw_angle);
 
 /**
- * @brief Set the GPIO pin to the specified value
- * 
- * @param value Value to set (0 or 1)
+ * @brief Read scaled angle register via I2C
+ *
+ * Reads 12-bit angle from ANGLE register (0x0E), which is scaled based
+ * on ZPOS and MPOS configuration. This is the application-ready angle.
+ *
+ * @param[in]  sensor Pointer to AS5600 instance
+ * @param[out] angle  Pointer to receive 12-bit scaled angle value
+ * @return true on success, false on I2C error
  */
-void AS5600_SetGPIO(AS5600_t *as5600, uint8_t value);
+bool as5600_get_angle(as5600_t *sensor, uint16_t *angle);
 
-// -------------------------------------------------------------
-// ---------------------- I2C FUNCTIONS ------------------------
-// -------------------------------------------------------------
+// =============================================================================
+// CONFIGURATION REGISTERS
+// =============================================================================
 
 /**
- * @brief Read register
- * 
- * @param reg Register address
- * @param data Pointer to the data
+ * @brief Set zero position (ZPOS register)
+ *
+ * Programs start position for angle measurement range. Combined with MPOS,
+ * defines angular operating range. Can be permanently programmed via BURN.
+ *
+ * @param[in] sensor         Pointer to AS5600 instance
+ * @param[in] start_position 12-bit zero position value (0-4095)
+ * @return true on success, false on I2C error
  */
-void AS5600_ReadReg(AS5600_t *as5600, AS5600_reg_t reg, uint16_t *data);
+bool as5600_set_start_position(as5600_t *sensor, uint16_t start_position);
 
 /**
- * @brief Write register
- * 
- * @param reg Register address
- * @param data Data to write
+ * @brief Get zero position (ZPOS register)
+ *
+ * @param[in]  sensor         Pointer to AS5600 instance
+ * @param[out] start_position Pointer to receive 12-bit zero position
+ * @return true on success, false on I2C error
  */
-void AS5600_WriteReg(AS5600_t *as5600, AS5600_reg_t reg, uint16_t data);
+bool as5600_get_start_position(as5600_t *sensor, uint16_t *start_position);
 
 /**
- * @brief Check if the register is valid for reading
- * 
- * @param reg Register address
- * @return true if the register is valid
- * @return false if the register is invalid
+ * @brief Set stop position (MPOS register)
+ *
+ * Programs end position for angle measurement range. Combined with ZPOS,
+ * defines angular operating range. Can be permanently programmed via BURN.
+ *
+ * @param[in] sensor        Pointer to AS5600 instance
+ * @param[in] stop_position 12-bit stop position value (0-4095)
+ * @return true on success, false on I2C error
  */
-bool AS5600_IsValidReadReg(AS5600_t *as5600, AS5600_reg_t reg);
+bool as5600_set_stop_position(as5600_t *sensor, uint16_t stop_position);
 
 /**
- * @brief Check if the register is valid for writing
- * 
- * @param reg Register address
- * @return true if the register is valid
- * @return false if the register is invalid
+ * @brief Get stop position (MPOS register)
+ *
+ * @param[in]  sensor        Pointer to AS5600 instance
+ * @param[out] stop_position Pointer to receive 12-bit stop position
+ * @return true on success, false on I2C error
  */
-bool AS5600_IsValidWriteReg(AS5600_t *as5600, AS5600_reg_t reg);
-
-// -------------------------------------------------------------
-// ---------------------- CONFIG REGISTERS ---------------------
-// -------------------------------------------------------------
+bool as5600_get_stop_position(as5600_t *sensor, uint16_t *stop_position);
 
 /**
- * @brief Set the start position by writing the ZPOS register
- * 
- * @param start_position 
+ * @brief Set maximum angle (MANG register)
+ *
+ * Programs maximum angle for proportional angle output. Used with analog
+ * output configuration. Can be permanently programmed via BURN.
+ *
+ * @param[in] sensor    Pointer to AS5600 instance
+ * @param[in] max_angle 12-bit maximum angle value (0-4095)
+ * @return true on success, false on I2C error
  */
-void AS5600_SetStartPosition(AS5600_t *as5600, uint16_t start_position);
+bool as5600_set_max_angle(as5600_t *sensor, uint16_t max_angle);
 
 /**
- * @brief Get the start position by reading the ZPOS register
- * 
- * @param start_position 
+ * @brief Get maximum angle (MANG register)
+ *
+ * @param[in]  sensor    Pointer to AS5600 instance
+ * @param[out] max_angle Pointer to receive 12-bit maximum angle
+ * @return true on success, false on I2C error
  */
-void AS5600_GetStartPosition(AS5600_t *as5600, uint16_t *start_position);
+bool as5600_get_max_angle(as5600_t *sensor, uint16_t *max_angle);
 
 /**
- * @brief Set the stop position by writing the MPOS register
+ * @brief Set sensor configuration (CONF register)
+ *
+ * Programs AS5600 operating mode including:
+ * - Power mode, Hysteresis, Output stage, PWM frequency
+ * - Slow filter, Fast filter threshold, Watchdog
+ *
+ * @param[in] sensor Pointer to AS5600 instance
+ * @param[in] config Configuration structure
+ * @return true on success, false on I2C error
  * 
- * @param stop_position 
+ * @note Configuration can be permanently programmed via BURN_SETTING
  */
-void AS5600_SetStopPosition(AS5600_t *as5600, uint16_t stop_position);
+bool as5600_set_config(as5600_t *sensor, as5600_config_t config);
 
 /**
- * @brief Get the stop position by reading the MPOS register
- * 
- * @param stop_position 
+ * @brief Get sensor configuration (CONF register)
+ *
+ * @param[in]  sensor Pointer to AS5600 instance
+ * @param[out] config Pointer to receive configuration
+ * @return true on success, false on I2C error
  */
-void AS5600_GetStopPosition(AS5600_t *as5600, uint16_t *stop_position);
+bool as5600_get_config(as5600_t *sensor, as5600_config_t *config);
+
+// =============================================================================
+// STATUS AND DIAGNOSTICS
+// =============================================================================
 
 /**
- * @brief Set the maximum angle by writing the MANG register
- * 
- * @param max_angle 
+ * @brief Read status register
+ *
+ * Status bits indicate:
+ * - MD: Magnet detected
+ * - ML: Magnet too weak
+ * - MH: Magnet too strong
+ *
+ * @param[in]  sensor Pointer to AS5600 instance
+ * @param[out] status Pointer to receive 8-bit status value
+ * @return true on success, false on I2C error
  */
-void AS5600_SetMaxAngle(AS5600_t *as5600, uint16_t max_angle);
+bool as5600_get_status(as5600_t *sensor, uint8_t *status);
 
 /**
- * @brief Get the maximum angle by reading the MANG register
- * 
- * @param max_angle 
+ * @brief Read Automatic Gain Control value
+ *
+ * AGC value indicates optimal magnet positioning. Target value is
+ * approximately midrange for best performance.
+ *
+ * @param[in]  sensor Pointer to AS5600 instance
+ * @param[out] agc    Pointer to receive 8-bit AGC value
+ * @return true on success, false on I2C error
  */
-void AS5600_GetMaxAngle(AS5600_t *as5600, uint16_t *max_angle);
+bool as5600_get_agc(as5600_t *sensor, uint8_t *agc);
 
 /**
- * @brief Set the configuration by writing the CONF register
- * 
- * @param conf Configuration
+ * @brief Read magnitude of internal CORDIC
+ *
+ * Magnitude indicates magnetic field strength. Useful for magnet
+ * positioning during installation.
+ *
+ * @param[in]  sensor    Pointer to AS5600 instance
+ * @param[out] magnitude Pointer to receive 12-bit magnitude value
+ * @return true on success, false on I2C error
  */
-void AS5600_SetConf(AS5600_t *as5600, AS5600_config_t conf);
+bool as5600_get_magnitude(as5600_t *sensor, uint16_t *magnitude);
+
+// =============================================================================
+// PERMANENT PROGRAMMING (BURN COMMANDS)
+// =============================================================================
 
 /**
- * @brief Get the configuration by reading the CONF register
+ * @brief Execute BURN_ANGLE command
+ *
+ * Permanently programs ZPOS and MPOS values to OTP memory. Can be executed
+ * up to 3 times (check ZMCO register). Requires magnet present (MD=1).
+ *
+ * @param[in] sensor Pointer to AS5600 instance
+ * @return true on success, false on error
  * 
- * @param conf Configuration
+ * @warning Permanent operation! Can only be done 3 times per device.
+ * @note Verify ZPOS/MPOS values before burning
  */
-void AS5600_GetConf(AS5600_t *as5600, AS5600_config_t *conf);
-
-
-// -------------------------------------------------------------
-// ---------------------- OUTPUT REGISTERS ---------------------
-// -------------------------------------------------------------
+bool as5600_burn_angle(as5600_t *sensor);
 
 /**
- * @brief Read RAW ANGLE register
+ * @brief Execute BURN_SETTING command
+ *
+ * Permanently programs MANG and CONF values to OTP memory. Can only be
+ * executed once. Only possible if ZPOS/MPOS never burned (ZMCO=0).
+ *
+ * @param[in] sensor Pointer to AS5600 instance
+ * @return true on success, false on error
  * 
- * @param reg buffer to store the register value
- * @param data Pointer to the data
+ * @warning Permanent operation! Can only be done once per device.
+ * @note Verify MANG/CONF values before burning
  */
-void AS5600_GetRawAngle(AS5600_t *as5600, uint16_t *raw_angle);
+bool as5600_burn_setting(as5600_t *sensor);
+
+// =============================================================================
+// LOW-LEVEL REGISTER ACCESS
+// =============================================================================
 
 /**
- * @brief Read ANGLE register
- * 
- * @param reg buffer to store the register value
- * @param data Pointer to the data
+ * @brief Read AS5600 register
+ *
+ * Low-level register read operation. Automatically handles 1-byte and
+ * 2-byte registers with proper endianness conversion.
+ *
+ * @param[in]  sensor Pointer to AS5600 instance
+ * @param[in]  reg    Register address to read
+ * @param[out] data   Pointer to receive register value (8 or 16-bit)
+ * @return true on success, false on invalid register or I2C error
  */
-void AS5600_GetAngle(AS5600_t *as5600, uint16_t *angle);
-
-// -------------------------------------------------------------
-// ---------------------- STATUS REGISTERS ---------------------
-// -------------------------------------------------------------
+bool as5600_read_register(as5600_t *sensor, as5600_reg_t reg, uint16_t *data);
 
 /**
- * @brief Read STATUS register
- * 
- * @param reg buffer to store the register value
- * @param data Pointer to the data
+ * @brief Write AS5600 register
+ *
+ * Low-level register write operation. Automatically handles 1-byte and
+ * 2-byte registers with proper endianness conversion.
+ *
+ * @param[in] sensor Pointer to AS5600 instance
+ * @param[in] reg    Register address to write
+ * @param[in] data   Data value to write (8 or 16-bit)
+ * @return true on success, false on invalid register or I2C error
  */
-void AS5600_GetStatus(AS5600_t *as5600, uint8_t *status);
+bool as5600_write_register(as5600_t *sensor, as5600_reg_t reg, uint16_t data);
 
 /**
- * @brief Read AGC register
+ * @brief Convert register name string to address
+ *
+ * Helper function for debugging/CLI. Converts register names like "zmco",
+ * "zpos", "angle" to corresponding register addresses.
+ *
+ * @param[in]  sensor  Pointer to AS5600 instance
+ * @param[in]  reg_str Register name string
+ * @return Register address, or -1 if invalid name
  * 
- * @param reg buffer to store the register value
- * @param data Pointer to the data
+ * @note Result is also stored in sensor->last_reg
  */
-void AS5600_GetAgc(AS5600_t *as5600, uint8_t *agc);
+as5600_reg_t as5600_reg_name_to_addr(as5600_t *sensor, const char *reg_str);
 
-/**
- * @brief Read MAGNITUDE register
- * 
- * @param reg buffer to store the register value
- * @param data Pointer to the data
- */
-void AS5600_GetMagnitude(AS5600_t *as5600, uint16_t *magnitude);
+#ifdef __cplusplus
+}
+#endif
 
-
-#endif // __AS5600_H__
+#endif // AS5600_H
