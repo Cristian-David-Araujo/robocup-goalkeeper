@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Teleoperation UI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dc3545;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected {
+            background: #28a745;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .velocity-display {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .velocity-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .velocity-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+
+        .velocity-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .velocity-unit {
+            font-size: 0.8em;
+            opacity: 0.8;
+        }
+
+        .controls-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .controls-title {
+            font-size: 1.2em;
+            color: #333;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .key-mapping {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .key-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .key-item.active {
+            border-color: #667eea;
+            background: #f0f4ff;
+            transform: scale(1.05);
+        }
+
+        .key-badge {
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .key-description {
+            flex: 1;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-stop {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-stop:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+        }
+
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #138496;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
+        }
+
+        .info-panel {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .info-panel strong {
+            color: #2196F3;
+        }
+
+        .footer {
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        @media (max-width: 768px) {
+            .velocity-display {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Robot Teleoperation</h1>
+        <p class="subtitle">Real-time Keyboard Control</p>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Disconnected</span>
+            </div>
+            <div>
+                <span id="updateRate">0 Hz</span>
+            </div>
+        </div>
+
+        <!-- Velocity Display -->
+        <div class="velocity-display">
+            <div class="velocity-card">
+                <div class="velocity-label">Linear X</div>
+                <div class="velocity-value" id="vxDisplay">0.00</div>
+                <div class="velocity-unit">m/s</div>
+            </div>
+            <div class="velocity-card">
+                <div class="velocity-label">Linear Y</div>
+                <div class="velocity-value" id="vyDisplay">0.00</div>
+                <div class="velocity-unit">m/s</div>
+            </div>
+            <div class="velocity-card">
+                <div class="velocity-label">Angular Z</div>
+                <div class="velocity-value" id="wzDisplay">0.00</div>
+                <div class="velocity-unit">rad/s</div>
+            </div>
+        </div>
+
+        <!-- Controls Section -->
+        <div class="controls-section">
+            <div class="controls-title">Keyboard Controls</div>
+            <div class="key-mapping">
+                <div class="key-item" data-key="w">
+                    <div class="key-badge">W</div>
+                    <div class="key-description">Forward (+X)</div>
+                </div>
+                <div class="key-item" data-key="s">
+                    <div class="key-badge">S</div>
+                    <div class="key-description">Backward (-X)</div>
+                </div>
+                <div class="key-item" data-key="a">
+                    <div class="key-badge">A</div>
+                    <div class="key-description">Strafe Left (-Y)</div>
+                </div>
+                <div class="key-item" data-key="d">
+                    <div class="key-badge">D</div>
+                    <div class="key-description">Strafe Right (+Y)</div>
+                </div>
+                <div class="key-item" data-key="q">
+                    <div class="key-badge">Q</div>
+                    <div class="key-description">Rotate Left (-Z)</div>
+                </div>
+                <div class="key-item" data-key="e">
+                    <div class="key-badge">E</div>
+                    <div class="key-description">Rotate Right (+Z)</div>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="button-group">
+                <button class="btn btn-stop" id="stopBtn">
+                    ⛔ Emergency Stop
+                </button>
+                <button class="btn btn-info" id="infoBtn">
+                    ℹ️ Info
+                </button>
+            </div>
+        </div>
+
+        <!-- Info Panel -->
+        <div class="info-panel" id="infoPanel" style="display: none;">
+            <strong>ℹ️ Instructions:</strong><br>
+            • Click anywhere on the page to enable keyboard control<br>
+            • Press and hold keys to move the robot<br>
+            • Release all keys to stop<br>
+            • Multiple keys can be pressed simultaneously<br>
+            • The robot will stop automatically if connection is lost<br>
+            <br>
+            <strong>Safety:</strong><br>
+            • Emergency Stop button immediately halts the robot<br>
+            • Commands timeout after 1 second of no updates<br>
+            • Velocities are clamped to configured limits
+        </div>
+
+        <div class="footer">
+            RoboCup Goalkeeper Team • Real-time WebSocket Control
+        </div>
+    </div>
+
+    <script src="/static/main.js"></script>
+</body>
+</html>

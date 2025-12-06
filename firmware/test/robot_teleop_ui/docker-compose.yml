@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  robot-teleop-ui:
+    build: .
+    container_name: robot-teleop-ui
+    ports:
+      - "8080:8080"
+    environment:
+      # Server configuration
+      - TELEOP_HOST=0.0.0.0
+      - TELEOP_PORT=8080
+      
+      # Velocity limits (adjust based on your robot)
+      - MAX_LINEAR_VEL=1.0      # m/s
+      - MAX_ANGULAR_VEL=2.0     # rad/s
+      
+      # Robot connection (update with your robot's IP)
+      - ROBOT_IP=192.168.1.100
+      - ROBOT_PORT=3333
+      
+      # Safety configuration
+      - COMMAND_TIMEOUT=1.0     # seconds
+      - UPDATE_RATE_HZ=20       # Hz
+    
+    restart: unless-stopped
+    
+    # Use host network mode if you need to discover robot on local network
+    # network_mode: host
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
