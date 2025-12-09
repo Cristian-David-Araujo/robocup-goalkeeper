@@ -337,8 +337,9 @@ void task_wifi_comm(void *pvParameters)
 
         // Forward command to velocity control task
         if (g_desired_velocity_queue) {
-            if (xQueueSend(g_desired_velocity_queue, &cmd, pdMS_TO_TICKS(5)) != pdTRUE) {
-                ESP_LOGW(TAG, "Failed to send command to queue (full)");
+            // Use overwrite to ensure latest command always gets through
+            if (xQueueOverwrite(g_desired_velocity_queue, &cmd) != pdTRUE) {
+                ESP_LOGW(TAG, "Failed to send command to queue");
             }
         }
 

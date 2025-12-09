@@ -76,7 +76,7 @@ extern "C" {
 // -----------------------------------------------------------------------------
 
 #define PID_VELOCITY_KP 1.0f               ///< Proportional gain for velocity control
-#define PID_VELOCITY_KI 0.01f               ///< Integral gain for velocity control
+#define PID_VELOCITY_KI 0.0f               ///< Integral gain for velocity control
 #define PID_VELOCITY_KD 0.00f              ///< Derivative gain for velocity control
 #define PID_VELOCITY_BETA 0.0f             ///< Beta filter coefficient for derivative term
 #define PID_VELOCITY_MAX_OUTPUT 1.0f       ///< Maximum velocity output (m/s or rad/s)
@@ -125,15 +125,15 @@ extern "C" {
 // WIFI CONTROL CONFIGURATION
 // =============================================================================
 
-#define WIFI_CONTROL_SSID           "RoboCup_Network"     ///< WiFi network SSID
-#define WIFI_CONTROL_PASSWORD       "goalkeeper2024"     ///< WiFi password
+#define WIFI_CONTROL_SSID           "Howlers-Ude"     ///< WiFi network SSID
+#define WIFI_CONTROL_PASSWORD       "9876543210"     ///< WiFi password
 #define WIFI_CONTROL_PORT           3333                 ///< UDP listening port
 #define WIFI_CONTROL_BUFFER_SIZE    256                  ///< Receive buffer size
 
 // Command timeout and limits
 #define WIFI_CMD_TIMEOUT_MS         500                  ///< Command timeout (ms)
-#define WIFI_MAX_LINEAR_VEL         1.0f                 ///< Max linear velocity (m/s)
-#define WIFI_MAX_ANGULAR_VEL        2.0f                 ///< Max angular velocity (rad/s)
+#define WIFI_MAX_LINEAR_VEL         2.0f                 ///< Max linear velocity (m/s)
+#define WIFI_MAX_ANGULAR_VEL        6.0f                 ///< Max angular velocity (rad/s)
 
 #ifdef __cplusplus
 }

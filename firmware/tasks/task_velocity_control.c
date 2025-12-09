@@ -174,8 +174,10 @@ void task_velocity_control(void *pvParameters)
         // 4. SEND CORRECTED VELOCITY TO IK TASK
         // -------------------------------------------------------------
         
-        if (xQueueSend(g_velocity_command_queue, &corrected, pdMS_TO_TICKS(5)) != pdTRUE) {
-            ESP_LOGW(TAG, "Failed to send corrected velocity (queue full)");
+        // Use overwrite to ensure latest command always gets through
+        // This prevents queue full errors since only the latest velocity matters
+        if (xQueueOverwrite(g_velocity_command_queue, &corrected) != pdTRUE) {
+            ESP_LOGW(TAG, "Failed to send corrected velocity");
         }
 
         // -------------------------------------------------------------

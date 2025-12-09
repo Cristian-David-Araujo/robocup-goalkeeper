@@ -12,11 +12,11 @@ services:
       - TELEOP_PORT=8080
       
       # Velocity limits (adjust based on your robot)
-      - MAX_LINEAR_VEL=1.0      # m/s
-      - MAX_ANGULAR_VEL=2.0     # rad/s
+      - MAX_LINEAR_VEL=2.0      # m/s
+      - MAX_ANGULAR_VEL=6.0     # rad/s
       
       # Robot connection (update with your robot's IP)
-      - ROBOT_IP=192.168.1.100
+      - ROBOT_IP=10.31.8.11
       - ROBOT_PORT=3333
       
       # Safety configuration
@@ -24,7 +24,7 @@ services:
       - UPDATE_RATE_HZ=20       # Hz
       
       # Velocity ramping (gradual acceleration)
-      - MAX_ACCELERATION=2.0    # m/s² or rad/s²
+      - MAX_ACCELERATION=1.0    # m/s² or rad/s²
       - RAMP_ENABLED=true       # Enable gradual velocity changes
     
     restart: unless-stopped

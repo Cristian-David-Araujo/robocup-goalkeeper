@@ -193,8 +193,8 @@ void app_main(void)
     
     // Create queues for cascaded control flow:
     // Trajectory → Velocity PID → IK → Wheel PID → Motors
-    g_desired_velocity_queue = xQueueCreate(2, sizeof(velocity_t));
-    g_velocity_command_queue = xQueueCreate(2, sizeof(velocity_t));
+    g_desired_velocity_queue = xQueueCreate(1, sizeof(velocity_t));  // Length 1 for xQueueOverwrite
+    g_velocity_command_queue = xQueueCreate(1, sizeof(velocity_t));  // Length 1 for xQueueOverwrite
     g_wheel_target_queue = xQueueCreate(1, sizeof(wheel_speeds_t));  // Length 1 for xQueueOverwrite
     
     // Validate all primitives were created successfully

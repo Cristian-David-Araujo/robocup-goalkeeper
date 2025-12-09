@@ -184,6 +184,9 @@ def apply_velocity_ramp(current: Dict[str, float], target: Dict[str, float], dt:
     """
     Apply gradual velocity ramping to avoid sudden movements.
     
+    Special behavior: Angular velocity (wz) goes directly to 0 when stopping,
+    without ramping, for immediate rotation stop.
+    
     Args:
         current: Current velocity {vx, vy, wz}
         target: Target velocity {vx, vy, wz}
@@ -199,6 +202,11 @@ def apply_velocity_ramp(current: Dict[str, float], target: Dict[str, float], dt:
     new_velocity = {}
     
     for key in ['vx', 'vy', 'wz']:
+        # Special case: wz goes directly to 0 without ramping when stopping
+        if key == 'wz' and target[key] == 0.0:
+            new_velocity[key] = 0.0
+            continue
+        
         delta = target[key] - current[key]
         
         if abs(delta) <= max_delta:

@@ -164,17 +164,18 @@ function computeVelocityFromKeys() {
     let vy = 0.0;
     let wz = 0.0;
     
-    // Linear X (forward/backward)
-    if (keyState.w) vx += config.maxLinearVelocity;
-    if (keyState.s) vx -= config.maxLinearVelocity;
+    // Linear X (strafe left/right)
+    if (keyState.a) vx -= config.maxLinearVelocity;
+    if (keyState.d) vx += config.maxLinearVelocity;
     
-    // Linear Y (strafe left/right)
-    if (keyState.a) vy -= config.maxLinearVelocity;
-    if (keyState.d) vy += config.maxLinearVelocity;
+    // Linear Y (forward/backward)
+    if (keyState.w) vy += config.maxLinearVelocity;
+    if (keyState.s) vy -= config.maxLinearVelocity;
     
     // Angular Z (rotate)
-    if (keyState.q) wz -= config.maxAngularVelocity;
-    if (keyState.e) wz += config.maxAngularVelocity;
+    // Q = counter-clockwise (positive), E = clockwise (negative)
+    if (keyState.q) wz += config.maxAngularVelocity;
+    if (keyState.e) wz -= config.maxAngularVelocity;
     
     return { vx, vy, wz };
 }
@@ -299,16 +300,12 @@ function emergencyStop() {
 function updateLoop() {
     const velocity = computeVelocityFromKeys();
     
-    // Only send if there's a change or if velocities are non-zero
-    if (velocity.vx !== currentVelocity.vx || 
-        velocity.vy !== currentVelocity.vy || 
-        velocity.wz !== currentVelocity.wz ||
-        velocity.vx !== 0 || velocity.vy !== 0 || velocity.wz !== 0) {
-        
-        sendVelocityCommand(velocity.vx, velocity.vy, velocity.wz);
-        currentVelocity = velocity;
-        updateVelocityDisplay();
-    }
+    // Always send command to ensure immediate response
+    // This is especially important for stopping rotation when releasing Q/E
+    sendVelocityCommand(velocity.vx, velocity.vy, velocity.wz);
+    
+    // Update local state
+    targetVelocity = velocity;
 }
 
 // =============================================================================

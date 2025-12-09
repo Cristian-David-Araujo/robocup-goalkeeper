@@ -43,7 +43,7 @@ Multiple keys can be pressed simultaneously for combined movements (e.g., W+D = 
 
 2. **Build and run**:
    ```bash
-   docker-compose up --build
+   docker compose up --build
    ```
 
 3. **Open browser**:

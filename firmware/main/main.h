@@ -80,17 +80,17 @@ extern velocity_t g_robot_estimated;
 
 /// @brief Queue for desired velocity commands (Trajectory → Velocity Control task)
 /// Item type: velocity_t
-/// Size: 2 items (only latest command matters)
+/// Size: 1 item (uses xQueueOverwrite for latest command)
 extern QueueHandle_t g_desired_velocity_queue;
 
 /// @brief Queue for corrected velocity commands (Velocity Control → IK task)
 /// Item type: velocity_t
-/// Size: 2 items (PID-corrected velocity commands)
+/// Size: 1 item (uses xQueueOverwrite for latest command)
 extern QueueHandle_t g_velocity_command_queue;
 
 /// @brief Queue for wheel speed targets (IK → Control task)
 /// Item type: wheel_speeds_t
-/// Size: 2 items (only latest targets matter)
+/// Size: 1 item (uses xQueueOverwrite for latest targets)
 extern QueueHandle_t g_wheel_target_queue;
 
 /// @brief Mutex protecting g_sensor_data
