@@ -90,6 +90,14 @@ target_velocity = {
     "wz": 0.0
 }
 
+# Actual velocity from robot sensors
+actual_velocity = {
+    "vx": 0.0,
+    "vy": 0.0,
+    "wz": 0.0,
+    "timestamp": None
+}
+
 # Last command time for timeout detection
 last_command_time = None
 
@@ -113,9 +121,13 @@ class RobotAdapter:
         self.robot_ip = robot_ip
         self.robot_port = robot_port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Bind to a local port so robot can send feedback back to us
+        self.sock.bind(('', 0))  # Bind to any available port
         self.sock.settimeout(0.5)  # 500ms timeout for connection check
         self.last_send_time = datetime.now()
-        logger.info(f"Robot adapter initialized for {robot_ip}:{robot_port}")
+        local_port = self.sock.getsockname()[1]
+        logger.info(f"Robot adapter initialized for {robot_ip}:{robot_port}, listening on port {local_port}")
     
     def send_command(self, vx: float, vy: float, wz: float) -> bool:
         """
@@ -138,9 +150,10 @@ class RobotAdapter:
             }
             
             message = json.dumps(command).encode('utf-8')
-            self.sock.sendto(message, (self.robot_ip, self.robot_port))
+            bytes_sent = self.sock.sendto(message, (self.robot_ip, self.robot_port))
             
-            logger.debug(f"Sent command: {command}")
+            local_addr = self.sock.getsockname()
+            logger.debug(f"Sent command: {command} from {local_addr[0]}:{local_addr[1]} to {self.robot_ip}:{self.robot_port} ({bytes_sent} bytes)")
             return True
             
         except Exception as e:
@@ -341,13 +354,16 @@ async def websocket_endpoint(websocket: WebSocket):
             )
             
             # Send acknowledgment back to client
-            await websocket.send_json({
+            response = {
                 "type": "ack",
                 "success": success,
-                "velocity": current_velocity,
-                "target_velocity": target_velocity,
+                "velocity": current_velocity,  # Ramped velocity sent to robot
+                "target_velocity": target_velocity,  # User keyboard input
+                "actual_velocity": actual_velocity,  # Real sensor feedback from robot
                 "robot_connected": robot_connected
-            })
+            }
+            
+            await websocket.send_json(response)
     
     except WebSocketDisconnect:
         logger.info(f"Client {client_id} disconnected")
@@ -376,6 +392,7 @@ async def websocket_endpoint(websocket: WebSocket):
 async def startup_event():
     """Initialize background tasks on startup."""
     asyncio.create_task(safety_monitor())
+    asyncio.create_task(udp_feedback_listener())
     asyncio.create_task(robot_connection_monitor())
     logger.info(f"Teleoperation server starting on {HOST}:{PORT}")
     logger.info(f"Robot target: {ROBOT_IP}:{ROBOT_PORT}")
@@ -417,31 +434,92 @@ async def safety_monitor():
                     last_command_time = None
 
 
+async def udp_feedback_listener():
+    """
+    Background task to listen for UDP feedback from robot.
+    
+    Receives telemetry data (actual velocity) from robot sensors.
+    Uses the same socket as RobotAdapter to receive replies.
+    """
+    global actual_velocity, robot_connected, last_robot_response_time
+    
+    logger.info("UDP feedback listener started")
+    
+    # Use the robot adapter's socket to receive feedback
+    # The robot sends feedback back to the source address/port
+    feedback_socket = robot_adapter.sock
+    
+    # Save original timeout and make non-blocking for async
+    original_timeout = feedback_socket.gettimeout()
+    feedback_socket.setblocking(False)
+    
+    local_addr = feedback_socket.getsockname()
+    logger.info(f"*** UDP FEEDBACK LISTENER ACTIVE on {local_addr[0]}:{local_addr[1]} ***")
+    logger.info(f"*** Robot will send feedback to this address/port ***")
+    
+    feedback_count = 0
+    
+    while True:
+        try:
+            # Non-blocking receive
+            data, addr = feedback_socket.recvfrom(1024)
+            
+            # Log immediately on first packet
+            if feedback_count == 0:
+                logger.info(f"!!! FIRST FEEDBACK RECEIVED from {addr} !!!")
+            
+            # Parse JSON feedback
+            try:
+                feedback = json.loads(data.decode('utf-8'))
+                actual_velocity = {
+                    "vx": feedback.get("vx", 0.0),
+                    "vy": feedback.get("vy", 0.0),
+                    "wz": feedback.get("wz", 0.0),
+                    "timestamp": datetime.now().isoformat()
+                }
+                last_robot_response_time = datetime.now()
+                robot_connected = True
+                feedback_count += 1
+                
+                if feedback_count % 20 == 0:  # Log every 20th feedback (1 second at 20Hz)
+                    logger.info(f"Robot feedback #{feedback_count}: vx={actual_velocity['vx']:.3f} "
+                              f"vy={actual_velocity['vy']:.3f} wz={actual_velocity['wz']:.3f} from {addr}")
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON feedback from robot: {data}")
+                
+        except BlockingIOError:
+            # No data available, sleep briefly
+            await asyncio.sleep(0.01)
+        except Exception as e:
+            logger.error(f"Error in UDP feedback listener: {e}")
+            await asyncio.sleep(0.1)
+
+
 async def robot_connection_monitor():
     """
     Background task to monitor robot connection status.
     
-    Periodically checks if robot is responsive.
+    Checks if robot feedback is being received regularly.
     """
     global robot_connected, last_robot_response_time
     
     logger.info("Robot connection monitor started")
     
     while True:
-        await asyncio.sleep(2.0)  # Check every 2 seconds
+        await asyncio.sleep(1.0)  # Check every second
         
         try:
-            # Attempt to check connection
-            is_connected = robot_adapter.check_connection()
-            
-            if is_connected:
-                if not robot_connected:
+            # Check if we've received feedback recently
+            if last_robot_response_time:
+                time_since_response = (datetime.now() - last_robot_response_time).total_seconds()
+                if time_since_response > 2.0:  # No feedback for 2 seconds
+                    if robot_connected:
+                        logger.warning("Robot connection lost (no feedback)")
+                    robot_connected = False
+                elif not robot_connected:
                     logger.info("Robot connection established")
-                robot_connected = True
-                last_robot_response_time = datetime.now()
+                    robot_connected = True
             else:
-                if robot_connected:
-                    logger.warning("Robot connection lost")
                 robot_connected = False
         
         except Exception as e:

@@ -52,6 +52,8 @@ static const char *TAG = "WIFI_COMM";
 // =============================================================================
 
 extern QueueHandle_t g_desired_velocity_queue;
+extern SemaphoreHandle_t g_estimated_data_mutex;
+extern velocity_t g_robot_estimated;
 
 // =============================================================================
 // INTERNAL STATE
@@ -59,6 +61,7 @@ extern QueueHandle_t g_desired_velocity_queue;
 
 static wifi_control_state_t g_wifi_state = {0};
 static int g_udp_socket = -1;
+static struct sockaddr_in g_server_addr = {0};  // Server address for feedback
 
 // =============================================================================
 // INTERNAL HELPER FUNCTIONS
@@ -224,6 +227,54 @@ static void clamp_velocity(velocity_t *cmd)
 }
 
 /**
+ * @brief Send robot telemetry (measured velocity) back to server
+ * 
+ * Sends the robot's actual measured velocity from sensors back to the server
+ * via UDP for real-time monitoring and display.
+ */
+static void send_telemetry_feedback(void)
+{
+    if (g_udp_socket < 0 || g_server_addr.sin_port == 0) {
+        return;  // No server address stored yet
+    }
+
+    // Read measured velocity from sensors (thread-safe)
+    velocity_t measured = {0};
+    if (g_estimated_data_mutex && 
+        xSemaphoreTake(g_estimated_data_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        measured = g_robot_estimated;
+        xSemaphoreGive(g_estimated_data_mutex);
+    } else {
+        return;  // Could not acquire mutex
+    }
+
+    // Format as JSON: {"vx": 0.123, "vy": 0.456, "wz": 0.789}
+    char tx_buffer[128];
+    int len = snprintf(tx_buffer, sizeof(tx_buffer),
+                      "{\"vx\":%.3f,\"vy\":%.3f,\"wz\":%.3f}",
+                      measured.vx, measured.vy, measured.wz);
+
+    if (len > 0 && len < sizeof(tx_buffer)) {
+        // Send feedback to server
+        int err = sendto(g_udp_socket, tx_buffer, len, 0,
+                        (struct sockaddr *)&g_server_addr, sizeof(g_server_addr));
+        if (err < 0) {
+            ESP_LOGW(TAG, "Failed to send telemetry: errno %d", errno);
+        } else {
+            // Log every 50th feedback packet (every ~2.5 seconds at 20Hz)
+            static uint32_t feedback_count = 0;
+            feedback_count++;
+            if (feedback_count % 50 == 0) {
+                ESP_LOGI(TAG, "Sent feedback #%lu to %s:%d - vx=%.3f vy=%.3f wz=%.3f",
+                        feedback_count,
+                        inet_ntoa(g_server_addr.sin_addr), ntohs(g_server_addr.sin_port),
+                        measured.vx, measured.vy, measured.wz);
+            }
+        }
+    }
+}
+
+/**
  * @brief Check for command timeout and send zero velocity if needed
  * 
  * @return true if command is still valid, false if timed out
@@ -294,6 +345,9 @@ void task_wifi_comm(void *pvParameters)
     char rx_buffer[WIFI_CONTROL_BUFFER_SIZE];
     struct sockaddr_in source_addr;
     socklen_t socklen = sizeof(source_addr);
+    
+    uint32_t last_feedback_time = 0;
+    const uint32_t feedback_interval_ms = 50;  // Send feedback every 50ms (20Hz)
 
     ESP_LOGI(TAG, "Ready to receive commands");
 
@@ -307,10 +361,24 @@ void task_wifi_comm(void *pvParameters)
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // Normal timeout, check command timeout
                 check_command_timeout();
+                
+                // Send periodic telemetry feedback
+                uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+                if (now - last_feedback_time >= feedback_interval_ms) {
+                    send_telemetry_feedback();
+                    last_feedback_time = now;
+                }
                 continue;
             }
             ESP_LOGE(TAG, "recvfrom failed: errno %d", errno);
             continue;
+        }
+
+        // Store server address for sending feedback
+        if (g_server_addr.sin_port == 0) {
+            g_server_addr = source_addr;
+            ESP_LOGI(TAG, "Server address stored: %s:%d", 
+                     inet_ntoa(source_addr.sin_addr), ntohs(source_addr.sin_port));
         }
 
         // Null-terminate received data
@@ -341,6 +409,13 @@ void task_wifi_comm(void *pvParameters)
             if (xQueueOverwrite(g_desired_velocity_queue, &cmd) != pdTRUE) {
                 ESP_LOGW(TAG, "Failed to send command to queue");
             }
+        }
+
+        // Send telemetry feedback immediately after receiving command
+        uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+        if (now - last_feedback_time >= feedback_interval_ms) {
+            send_telemetry_feedback();
+            last_feedback_time = now;
         }
 
         // Log periodically (every 50 packets)

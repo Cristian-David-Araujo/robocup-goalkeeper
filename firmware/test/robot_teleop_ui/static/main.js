@@ -37,15 +37,22 @@ const keyState = {
     e: false
 };
 
-// Current velocities (actual robot velocity with ramping)
-let currentVelocity = {
+// Target velocities (what user wants from keyboard)
+let targetVelocity = {
     vx: 0.0,
     vy: 0.0,
     wz: 0.0
 };
 
-// Target velocities (what user wants)
-let targetVelocity = {
+// Actual velocities (measured from robot sensors)
+let actualVelocity = {
+    vx: 0.0,
+    vy: 0.0,
+    wz: 0.0
+};
+
+// Ramped velocity (server-side acceleration limiting)
+let rampedVelocity = {
     vx: 0.0,
     vy: 0.0,
     wz: 0.0
@@ -55,6 +62,29 @@ let targetVelocity = {
 let updateCount = 0;
 let lastUpdateTime = Date.now();
 let updateRateDisplay = 0;
+
+// =============================================================================
+// GRAPH DATA
+// =============================================================================
+
+const GRAPH_HISTORY_SIZE = 100; // Number of data points to keep
+const GRAPH_UPDATE_INTERVAL = 100; // Update every 100ms (10 Hz)
+
+// Graph data buffers
+const graphData = {
+    vx: { target: [], actual: [] },
+    vy: { target: [], actual: [] },
+    wz: { target: [], actual: [] }
+};
+
+// Canvas contexts
+let chartContexts = {
+    vx: null,
+    vy: null,
+    wz: null
+};
+
+let lastGraphUpdate = Date.now();
 
 // =============================================================================
 // WEBSOCKET CONNECTION
@@ -109,13 +139,15 @@ function handleWebSocketMessage(data) {
         updateRobotConnectionStatus(robotConnected);
         console.log('Received config:', config);
     } else if (data.type === 'ack') {
+        // Ramped velocity (server-side acceleration limiting)
         if (data.velocity) {
-            currentVelocity = {
+            rampedVelocity = {
                 vx: data.velocity.vx,
                 vy: data.velocity.vy,
                 wz: data.velocity.wz
             };
         }
+        // Target velocity (user keyboard input)
         if (data.target_velocity) {
             targetVelocity = {
                 vx: data.target_velocity.vx,
@@ -123,9 +155,25 @@ function handleWebSocketMessage(data) {
                 wz: data.target_velocity.wz
             };
         }
+        // Actual velocity from robot sensors
+        if (data.actual_velocity) {
+            actualVelocity = {
+                vx: data.actual_velocity.vx,
+                vy: data.actual_velocity.vy,
+                wz: data.actual_velocity.wz
+            };
+            // Debug: log occasionally to check if receiving data
+            if (Math.random() < 0.01) { // 1% chance = ~every 5 seconds at 20Hz
+                console.log('Actual velocity from robot:', actualVelocity);
+            }
+        }
         if (data.robot_connected !== undefined) {
             robotConnected = data.robot_connected;
             updateRobotConnectionStatus(robotConnected);
+            // Debug: log connection status changes
+            if (Math.random() < 0.02) {
+                console.log('Robot connected:', robotConnected, 'actual_velocity:', data.actual_velocity);
+            }
         }
         updateVelocityDisplay();
     }
@@ -246,10 +294,10 @@ function updateRobotConnectionStatus(connected) {
 }
 
 function updateVelocityDisplay() {
-    // Update current velocity (actual)
-    document.getElementById('vxDisplay').textContent = currentVelocity.vx.toFixed(2);
-    document.getElementById('vyDisplay').textContent = currentVelocity.vy.toFixed(2);
-    document.getElementById('wzDisplay').textContent = currentVelocity.wz.toFixed(2);
+    // Update actual velocity from robot sensors
+    document.getElementById('vxDisplay').textContent = actualVelocity.vx.toFixed(2);
+    document.getElementById('vyDisplay').textContent = actualVelocity.vy.toFixed(2);
+    document.getElementById('wzDisplay').textContent = actualVelocity.wz.toFixed(2);
     
     // Update target velocity (what user wants)
     const vxTargetEl = document.getElementById('vxTarget');
@@ -257,19 +305,214 @@ function updateVelocityDisplay() {
     const wzTargetEl = document.getElementById('wzTarget');
     
     if (vxTargetEl) {
-        const showTarget = Math.abs(targetVelocity.vx - currentVelocity.vx) > 0.01;
+        const showTarget = Math.abs(targetVelocity.vx - actualVelocity.vx) > 0.01;
         vxTargetEl.textContent = showTarget ? `→ ${targetVelocity.vx.toFixed(2)}` : '';
     }
     
     if (vyTargetEl) {
-        const showTarget = Math.abs(targetVelocity.vy - currentVelocity.vy) > 0.01;
+        const showTarget = Math.abs(targetVelocity.vy - actualVelocity.vy) > 0.01;
         vyTargetEl.textContent = showTarget ? `→ ${targetVelocity.vy.toFixed(2)}` : '';
     }
     
     if (wzTargetEl) {
-        const showTarget = Math.abs(targetVelocity.wz - currentVelocity.wz) > 0.01;
+        const showTarget = Math.abs(targetVelocity.wz - actualVelocity.wz) > 0.01;
         wzTargetEl.textContent = showTarget ? `→ ${targetVelocity.wz.toFixed(2)}` : '';
     }
+    
+    // Update graphs periodically
+    updateGraphs();
+}
+
+// =============================================================================
+// GRAPH FUNCTIONS
+// =============================================================================
+
+function initGraphs() {
+    chartContexts.vx = document.getElementById('vxChart').getContext('2d');
+    chartContexts.vy = document.getElementById('vyChart').getContext('2d');
+    chartContexts.wz = document.getElementById('wzChart').getContext('2d');
+}
+
+function updateGraphData() {
+    const now = Date.now();
+    if (now - lastGraphUpdate < GRAPH_UPDATE_INTERVAL) {
+        return;
+    }
+    lastGraphUpdate = now;
+    
+    // Add new data points: commanded (ramped) and actual (from sensors)
+    ['vx', 'vy', 'wz'].forEach(key => {
+        graphData[key].target.push(rampedVelocity[key]);  // Command sent to robot
+        graphData[key].actual.push(actualVelocity[key]);  // Measured by robot sensors
+        
+        // Keep only recent history
+        if (graphData[key].target.length > GRAPH_HISTORY_SIZE) {
+            graphData[key].target.shift();
+            graphData[key].actual.shift();
+        }
+    });
+}
+
+function updateGraphs() {
+    updateGraphData();
+    
+    drawGraph(chartContexts.vx, graphData.vx, 'Linear X', config.maxLinearVelocity);
+    drawGraph(chartContexts.vy, graphData.vy, 'Linear Y', config.maxLinearVelocity);
+    drawGraph(chartContexts.wz, graphData.wz, 'Angular Z', config.maxAngularVelocity);
+}
+
+function drawGraph(ctx, data, label, maxValue) {
+    if (!ctx) return;
+    
+    const canvas = ctx.canvas;
+    const width = canvas.width;
+    const height = canvas.height;
+    const padding = 45;
+    const graphWidth = width - 2 * padding;
+    const graphHeight = height - 2 * padding;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+    
+    // Dark background gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#242735');
+    gradient.addColorStop(1, '#1a1d29');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Draw grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 0.5;
+    
+    // Horizontal grid lines
+    for (let i = 0; i <= 4; i++) {
+        const y = padding + (graphHeight / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(width - padding, y);
+        ctx.stroke();
+    }
+    
+    // Vertical grid lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    for (let i = 0; i <= 10; i++) {
+        const x = padding + (graphWidth / 10) * i;
+        ctx.beginPath();
+        ctx.moveTo(x, padding);
+        ctx.lineTo(x, height - padding);
+        ctx.stroke();
+    }
+    
+    // Draw axes
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, height - padding);
+    ctx.lineTo(width - padding, height - padding);
+    ctx.stroke();
+    
+    // Draw zero line with gradient effect
+    const zeroY = padding + graphHeight / 2;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([8, 4]);
+    ctx.beginPath();
+    ctx.moveTo(padding, zeroY);
+    ctx.lineTo(width - padding, zeroY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    if (data.target.length === 0) return;
+    
+    // Scale factor
+    const scale = graphHeight / (2 * maxValue);
+    
+    // Draw commanded velocity line (dashed blue)
+    ctx.shadowColor = 'rgba(102, 126, 234, 0.6)';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = '#7c8ef8';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    for (let i = 0; i < data.target.length; i++) {
+        const x = padding + (graphWidth / GRAPH_HISTORY_SIZE) * i;
+        const y = zeroY - data.target[i] * scale;
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // Draw actual velocity from sensors (solid green)
+    ctx.shadowColor = 'rgba(40, 220, 100, 0.6)';
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = '#3ddc84';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (let i = 0; i < data.actual.length; i++) {
+        const x = padding + (graphWidth / GRAPH_HISTORY_SIZE) * i;
+        const y = zeroY - data.actual[i] * scale;
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    
+    // Draw labels
+    ctx.fillStyle = '#e0e0e0';
+    ctx.font = 'bold 10px Segoe UI';
+    ctx.textAlign = 'right';
+    ctx.fillText(maxValue.toFixed(1), padding - 8, padding + 5);
+    ctx.fillText('0', padding - 8, zeroY + 5);
+    ctx.fillText((-maxValue).toFixed(1), padding - 8, height - padding + 5);
+    
+    // Title label
+    ctx.font = 'bold 13px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillText(label, width / 2, padding - 20);
+    
+    // Legend with dark background
+    const legendX = width - padding - 120;
+    const legendY = padding + 5;
+    ctx.fillStyle = 'rgba(26, 29, 41, 0.95)';
+    ctx.fillRect(legendX - 5, legendY - 2, 115, 42);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(legendX - 5, legendY - 2, 115, 42);
+    
+    ctx.font = 'bold 10px Segoe UI';
+    ctx.textAlign = 'left';
+    
+    // Command legend (dashed blue)
+    ctx.shadowColor = 'rgba(124, 142, 248, 0.6)';
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = '#7c8ef8';
+    ctx.beginPath();
+    ctx.arc(legendX + 5, legendY + 8, 4, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillText('Command', legendX + 15, legendY + 12);
+    
+    // Actual legend (solid green)
+    ctx.shadowColor = 'rgba(61, 220, 132, 0.6)';
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = '#3ddc84';
+    ctx.beginPath();
+    ctx.arc(legendX + 5, legendY + 28, 4, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillText('Actual', legendX + 15, legendY + 32);
 }
 
 function emergencyStop() {
@@ -313,6 +556,9 @@ function updateLoop() {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize graphs
+    initGraphs();
+    
     // Connect WebSocket
     connectWebSocket();
     

@@ -64,23 +64,23 @@ extern "C" {
 // WHEEL SPEED PID (Inner Loop) - Controls individual wheel velocities
 // -----------------------------------------------------------------------------
 
-#define PID_MOTOR_KP 0.1f                  ///< Proportional gain
-#define PID_MOTOR_KI 0.006f                ///< Integral gain
+#define PID_MOTOR_KP 0.05f                  ///< Proportional gain
+#define PID_MOTOR_KI 0.004f                ///< Integral gain
 #define PID_MOTOR_KD 0.0f                  ///< Derivative gain
 #define PID_MOTOR_BETA 0.0f                ///< Beta filter coefficient for derivative term
-#define PID_MOTOR_MAX_OUTPUT 80.0f         ///< Maximum PID output (% motor speed)
-#define PID_MOTOR_MIN_OUTPUT -80.0f        ///< Minimum PID output (% motor speed)
+#define PID_MOTOR_MAX_OUTPUT 90.0f         ///< Maximum PID output (% motor speed)
+#define PID_MOTOR_MIN_OUTPUT -90.0f        ///< Minimum PID output (% motor speed)
 
 // -----------------------------------------------------------------------------
 // ROBOT VELOCITY PID (Outer Loop) - Controls robot vx, vy, wz
 // -----------------------------------------------------------------------------
 
 #define PID_VELOCITY_KP 1.0f               ///< Proportional gain for velocity control
-#define PID_VELOCITY_KI 0.0f               ///< Integral gain for velocity control
+#define PID_VELOCITY_KI 0.01f               ///< Integral gain for velocity control
 #define PID_VELOCITY_KD 0.00f              ///< Derivative gain for velocity control
 #define PID_VELOCITY_BETA 0.0f             ///< Beta filter coefficient for derivative term
-#define PID_VELOCITY_MAX_OUTPUT 1.0f       ///< Maximum velocity output (m/s or rad/s)
-#define PID_VELOCITY_MIN_OUTPUT -1.0f      ///< Minimum velocity output (m/s or rad/s)
+#define PID_VELOCITY_MAX_OUTPUT 4.0f       ///< Maximum velocity output (m/s or rad/s)
+#define PID_VELOCITY_MIN_OUTPUT -4.0f      ///< Minimum velocity output (m/s or rad/s)
 
 // =============================================================================
 // SENSOR TASK CONFIGURATION
@@ -133,7 +133,7 @@ extern "C" {
 // Command timeout and limits
 #define WIFI_CMD_TIMEOUT_MS         500                  ///< Command timeout (ms)
 #define WIFI_MAX_LINEAR_VEL         2.0f                 ///< Max linear velocity (m/s)
-#define WIFI_MAX_ANGULAR_VEL        6.0f                 ///< Max angular velocity (rad/s)
+#define WIFI_MAX_ANGULAR_VEL        2.0f                 ///< Max angular velocity (rad/s)
 
 #ifdef __cplusplus
 }
