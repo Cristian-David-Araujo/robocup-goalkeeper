@@ -96,11 +96,18 @@ SemaphoreHandle_t g_estimated_data_mutex = NULL;
 
 TaskHandle_t g_task_sensor_handle = NULL;
 TaskHandle_t g_task_control_handle = NULL;
-extern TaskHandle_t g_task_ik_handle;  // Defined in task_inverse_kinematics.c
-extern TaskHandle_t g_task_velocity_control_handle;  // Defined in task_velocity_control.c
-TaskHandle_t g_task_trajectory_handle = NULL;  // Disabled when using WiFi control
-TaskHandle_t g_task_wifi_comm_handle = NULL;
 TaskHandle_t g_handle_parser_task = NULL;
+
+// =============================================================================
+// PID TUNING MODE STATE
+// =============================================================================
+
+volatile bool g_wheel_tuning_active = false;
+volatile bool g_body_tuning_active = false;
+float g_wheel_tuning_setpoint = 0.0f;
+float g_body_tuning_setpoint[3] = {0.0f, 0.0f, 0.0f};  // vx, vy, wz
+float g_pid_outputs[3] = {0.0f, 0.0f, 0.0f};  // wheel PIDs
+float g_velocity_pid_outputs[3] = {0.0f, 0.0f, 0.0f};  // vx, vy, wz PIDs
 
 // =============================================================================
 // TASK FORWARD DECLARATIONS
@@ -193,8 +200,8 @@ void app_main(void)
     
     // Create queues for cascaded control flow:
     // Trajectory → Velocity PID → IK → Wheel PID → Motors
-    g_desired_velocity_queue = xQueueCreate(1, sizeof(velocity_t));  // Length 1 for xQueueOverwrite
-    g_velocity_command_queue = xQueueCreate(1, sizeof(velocity_t));  // Length 1 for xQueueOverwrite
+    g_desired_velocity_queue = xQueueCreate(2, sizeof(velocity_t));
+    g_velocity_command_queue = xQueueCreate(2, sizeof(velocity_t));
     g_wheel_target_queue = xQueueCreate(1, sizeof(wheel_speeds_t));  // Length 1 for xQueueOverwrite
     
     // Validate all primitives were created successfully
@@ -269,38 +276,20 @@ void app_main(void)
     }
     ESP_LOGI(TAG, "  ✓ Velocity control task created (priority 4)");
     
-    // ===== TRAJECTORY OR WIFI CONTROL (MUTUALLY EXCLUSIVE) =====
-    // Uncomment ONE of the following task creation blocks:
-    
-    // Option 1: Autonomous trajectory generation (3)
-    // xReturned = xTaskCreate(
-    //     task_move_trajectory,
-    //     "MoveTask",
-    //     4096,
-    //     NULL,
-    //     3,
-    //     &g_task_trajectory_handle
-    // );
-    // if (xReturned != pdPASS) {
-    //     ESP_LOGE(TAG, "Failed to create trajectory task");
-    //     return;
-    // }
-    // ESP_LOGI(TAG, "  ✓ Trajectory task created (priority 3)");
-    
-    // Option 2: WiFi remote control (3) - CURRENTLY ACTIVE
+    // Trajectory generation task (3)
     xReturned = xTaskCreate(
-        task_wifi_comm,
-        "WiFiCommTask",
-        4096,
+        task_move_trajectory,
+        "MoveTask",
+        4096,  // Increased from 2048 to prevent stack overflow
         NULL,
         3,
-        &g_task_wifi_comm_handle
+        &g_task_trajectory_handle
     );
     if (xReturned != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create WiFi communication task");
+        ESP_LOGE(TAG, "Failed to create move task");
         return;
     }
-    ESP_LOGI(TAG, "  ✓ WiFi communication task created (priority 3)");
+    ESP_LOGI(TAG, "  ✓ Trajectory task created (priority 3)");
     
     // Motor control task (2) - inner PID loop
     xReturned = xTaskCreate(
@@ -317,13 +306,33 @@ void app_main(void)
     }
     ESP_LOGI(TAG, "  ✓ Motor control task created (priority 2)");
     
+    // WiFi communication task (1) - network I/O
+    xReturned = xTaskCreate(
+        task_wifi_comm,
+        "WiFiCommTask",
+        8192,  // Larger stack for WiFi and JSON
+        NULL,
+        1,
+        &g_task_wifi_comm_handle
+    );
+    if (xReturned != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create WiFi communication task");
+        return;
+    }
+    ESP_LOGI(TAG, "  ✓ WiFi communication task created (priority 1)");
+    
     ESP_LOGI(TAG, "==============================================");
     ESP_LOGI(TAG, "All tasks created successfully");
     ESP_LOGI(TAG, "Task Communication Architecture:");
-    ESP_LOGI(TAG, "  WiFi Comm → Vel Control: Queue (remote velocity commands)");
+    ESP_LOGI(TAG, "  WiFi → Vel Control: Queue (velocity commands)");
+    ESP_LOGI(TAG, "  WiFi → PIDs: Mutex (tuning parameters)");
+    ESP_LOGI(TAG, "  Trajectory → Vel Control: Queue (desired velocity)");
     ESP_LOGI(TAG, "  Vel Control → IK: Queue (corrected velocity)");
     ESP_LOGI(TAG, "  IK → Control: Queue (wheel targets)");
     ESP_LOGI(TAG, "  Sensor ↔ Tasks: Mutexes (shared data)");
     ESP_LOGI(TAG, "==============================================");
-    ESP_LOGI(TAG, "System running with WiFi remote control...");
+    ESP_LOGI(TAG, "System running...");
+    ESP_LOGI(TAG, "WiFi AP: SSID=RoboCup_Robot, Password=robot123");
+    ESP_LOGI(TAG, "UDP Server: Port 3333");
 }
+

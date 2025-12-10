@@ -75,6 +75,17 @@ void task_move_trajectory(void *arg)
 
     while (1) {
         // =================================================================
+        // CHECK TUNING MODES
+        // =================================================================
+        
+        // Skip trajectory planning during body tuning mode
+        // (velocity control uses direct setpoints from tuning interface)
+        if (g_body_tuning_active) {
+            vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(TASK_PERIOD_MS));
+            continue;
+        }
+        
+        // =================================================================
         // CIRCULAR TRAJECTORY COMPUTATION
         // =================================================================
         

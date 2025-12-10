@@ -33,6 +33,7 @@
 #include "esp_log.h"
 #include <math.h>
 
+#include "main.h"
 #include "types_utils.h"
 #include "config_utils.h"
 #include "pid.h"
@@ -102,16 +103,34 @@ void task_velocity_control(void *pvParameters)
     
     while (1) {
         // -------------------------------------------------------------
-        // 1. RECEIVE DESIRED VELOCITY FROM TRAJECTORY TASK
+        // 0. CHECK TUNING MODES
         // -------------------------------------------------------------
         
-        if (xQueueReceive(g_desired_velocity_queue, &desired, pdMS_TO_TICKS(5)) == pdTRUE) {
+        // Skip velocity control if wheel tuning is active
+        if (g_wheel_tuning_active) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+        
+        // In body tuning mode, use tuning setpoints instead of trajectory
+        if (g_body_tuning_active) {
+            desired.vx = g_body_tuning_setpoint[0];
+            desired.vy = g_body_tuning_setpoint[1];
+            desired.wz = g_body_tuning_setpoint[2];
+            no_desired_count = 0;
+        } else {
+            // -------------------------------------------------------------
+            // 1. RECEIVE DESIRED VELOCITY FROM TRAJECTORY TASK
+            // -------------------------------------------------------------
+            
+            if (xQueueReceive(g_desired_velocity_queue, &desired, pdMS_TO_TICKS(5)) == pdTRUE) {
             no_desired_count = 0;
         } else {
             // No new desired velocity, continue with previous value
             no_desired_count++;
-            if (no_desired_count % 500 == 0) {
-                ESP_LOGW(TAG, "No desired velocity for %lu cycles", no_desired_count);
+                if (no_desired_count % 500 == 0) {
+                    ESP_LOGW(TAG, "No desired velocity for %lu cycles", no_desired_count);
+                }
             }
         }
 
@@ -155,6 +174,11 @@ void task_velocity_control(void *pvParameters)
             pid_compute(g_velocity_pid[1], measured.vy, &vy_correction);
             pid_compute(g_velocity_pid[2], measured.wz, &wz_correction);
             
+            // Store outputs for telemetry
+            g_velocity_pid_outputs[0] = vx_correction;
+            g_velocity_pid_outputs[1] = vy_correction;
+            g_velocity_pid_outputs[2] = wz_correction;
+            
             xSemaphoreGive(g_velocity_pid_mutex);
             
             // Corrected velocity = desired + PID correction
@@ -174,10 +198,8 @@ void task_velocity_control(void *pvParameters)
         // 4. SEND CORRECTED VELOCITY TO IK TASK
         // -------------------------------------------------------------
         
-        // Use overwrite to ensure latest command always gets through
-        // This prevents queue full errors since only the latest velocity matters
-        if (xQueueOverwrite(g_velocity_command_queue, &corrected) != pdTRUE) {
-            ESP_LOGW(TAG, "Failed to send corrected velocity");
+        if (xQueueSend(g_velocity_command_queue, &corrected, pdMS_TO_TICKS(5)) != pdTRUE) {
+            ESP_LOGW(TAG, "Failed to send corrected velocity (queue full)");
         }
 
         // -------------------------------------------------------------

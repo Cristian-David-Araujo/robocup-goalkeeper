@@ -179,6 +179,29 @@ int pid_compute(pid_block_handle_t pid, float input, float *output);
  */
 int pid_reset_block(pid_block_handle_t pid);
 
+/**
+ * @brief Update PID controller gains at runtime
+ *
+ * Allows modification of PID gains (Kp, Ki, Kd) without recreating the controller.
+ * Resets the integral accumulator to prevent windup with new gains.
+ * Useful for runtime tuning and parameter optimization.
+ *
+ * @param[in] pid PID controller handle
+ * @param[in] kp New proportional gain (must be >= 0)
+ * @param[in] ki New integral gain (must be >= 0)
+ * @param[in] kd New derivative gain (must be >= 0)
+ * @return 
+ *      - PID_OK: Gains updated successfully
+ *      - PID_ERR_INVALID_ARG: Invalid PID handle or negative gain values
+ * 
+ * Thread-safety: Not thread-safe. Protect with mutex when called from multiple tasks.
+ * 
+ * @note This function resets the integral accumulator to zero to prevent
+ *       windup issues when changing gains. This may cause a transient in
+ *       the control output.
+ */
+int pid_update_gains(pid_block_handle_t pid, float kp, float ki, float kd);
+
 #ifdef __cplusplus
 }
 #endif

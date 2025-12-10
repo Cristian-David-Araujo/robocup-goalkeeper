@@ -80,17 +80,17 @@ extern velocity_t g_robot_estimated;
 
 /// @brief Queue for desired velocity commands (Trajectory → Velocity Control task)
 /// Item type: velocity_t
-/// Size: 1 item (uses xQueueOverwrite for latest command)
+/// Size: 2 items (only latest command matters)
 extern QueueHandle_t g_desired_velocity_queue;
 
 /// @brief Queue for corrected velocity commands (Velocity Control → IK task)
 /// Item type: velocity_t
-/// Size: 1 item (uses xQueueOverwrite for latest command)
+/// Size: 2 items (PID-corrected velocity commands)
 extern QueueHandle_t g_velocity_command_queue;
 
 /// @brief Queue for wheel speed targets (IK → Control task)
 /// Item type: wheel_speeds_t
-/// Size: 1 item (uses xQueueOverwrite for latest targets)
+/// Size: 2 items (only latest targets matter)
 extern QueueHandle_t g_wheel_target_queue;
 
 /// @brief Mutex protecting g_sensor_data
@@ -134,6 +134,38 @@ extern TaskHandle_t g_task_trajectory_handle;
 
 /// @brief Handle for UART parser task (used for parameter tuning)
 extern TaskHandle_t g_handle_parser_task;
+
+/// @brief Handle for WiFi communication task
+extern TaskHandle_t g_task_wifi_comm_handle;
+
+// =============================================================================
+// PID TUNING MODE (for web-based tuning interfaces)
+// =============================================================================
+
+/// @brief Flag indicating wheel PID tuning mode is active
+/// When true: Disables IK, velocity control, and trajectory planning
+/// Motors are controlled directly with g_wheel_tuning_setpoint
+extern volatile bool g_wheel_tuning_active;
+
+/// @brief Flag indicating body PID tuning mode is active
+/// When true: Disables trajectory planning, uses direct body velocity commands
+extern volatile bool g_body_tuning_active;
+
+/// @brief Setpoint for all wheels during wheel tuning (rad/s)
+/// Applied uniformly to all three wheels for step response testing
+extern float g_wheel_tuning_setpoint;
+
+/// @brief Body velocity setpoints for body tuning mode (m/s, rad/s)
+/// Index: [0]=vx, [1]=vy, [2]=wz
+extern float g_body_tuning_setpoint[3];
+
+/// @brief Array of last PID outputs for telemetry (PWM %)
+/// Index: [0]=wheel1, [1]=wheel2, [2]=wheel3
+extern float g_pid_outputs[3];
+
+/// @brief Array of last velocity PID outputs for telemetry
+/// Index: [0]=vx, [1]=vy, [2]=wz
+extern float g_velocity_pid_outputs[3];
 
 #ifdef __cplusplus
 }

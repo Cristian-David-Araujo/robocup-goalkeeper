@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  body-tuning-ui:
+    build: .
+    container_name: body-pid-tuning-ui
+    network_mode: "host"
+    environment:
+      - ROBOT_IP=${ROBOT_IP:-192.168.4.1}
+      - ROBOT_PORT=${ROBOT_PORT:-12345}
+      - LOCAL_LISTEN_PORT=${LOCAL_LISTEN_PORT:-12346}
+      - TELEMETRY_RATE_HZ=${TELEMETRY_RATE_HZ:-50}
+    volumes:
+      - ./logs:/app/logs
+      - ./static:/app/static:ro
+    restart: unless-stopped
