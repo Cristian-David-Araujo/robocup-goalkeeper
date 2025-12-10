@@ -135,6 +135,27 @@ extern TaskHandle_t g_task_trajectory_handle;
 /// @brief Handle for UART parser task (used for parameter tuning)
 extern TaskHandle_t g_handle_parser_task;
 
+// =============================================================================
+// PID TUNING MODE (for web-based tuning interfaces)
+// =============================================================================
+
+/// @brief Flag indicating wheel PID tuning mode is active
+/// When true: Disables IK, velocity control, and trajectory planning
+/// Motors are controlled directly with g_wheel_tuning_setpoint
+extern volatile bool g_wheel_tuning_active;
+
+/// @brief Flag indicating body PID tuning mode is active
+/// When true: Disables trajectory planning, uses direct body velocity commands
+extern volatile bool g_body_tuning_active;
+
+/// @brief Setpoint for all wheels during wheel tuning (rad/s)
+/// Applied uniformly to all three wheels for step response testing
+extern float g_wheel_tuning_setpoint;
+
+/// @brief Array of last PID outputs for telemetry (PWM %)
+/// Index: [0]=wheel1, [1]=wheel2, [2]=wheel3
+extern float g_pid_outputs[3];
+
 #ifdef __cplusplus
 }
 #endif

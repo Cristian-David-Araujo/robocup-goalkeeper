@@ -251,3 +251,26 @@ int pid_reset_block(pid_block_handle_t pid)
 
     return PID_OK;
 }
+
+int pid_update_gains(pid_block_handle_t pid, float kp, float ki, float kd)
+{
+    if (!pid) {
+        return PID_ERR_INVALID_ARG;
+    }
+    
+    // Validate gains (must be non-negative)
+    if (kp < 0.0f || ki < 0.0f || kd < 0.0f) {
+        return PID_ERR_INVALID_ARG;
+    }
+    
+    // Update gains
+    pid->kp = kp;
+    pid->ki = ki;
+    pid->kd = kd;
+    
+    // Reset integral to prevent windup with new parameters
+    // Keep other state to maintain smooth transition
+    pid->integral_err = 0.0f;
+    
+    return PID_OK;
+}

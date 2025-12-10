@@ -103,6 +103,15 @@ TaskHandle_t g_task_wifi_comm_handle = NULL;
 TaskHandle_t g_handle_parser_task = NULL;
 
 // =============================================================================
+// PID TUNING MODE STATE
+// =============================================================================
+
+volatile bool g_wheel_tuning_active = false;
+volatile bool g_body_tuning_active = false;
+float g_wheel_tuning_setpoint = 0.0f;
+float g_pid_outputs[3] = {0.0f, 0.0f, 0.0f};
+
+// =============================================================================
 // TASK FORWARD DECLARATIONS
 // =============================================================================
 

@@ -33,6 +33,7 @@
 #include "esp_log.h"
 #include <math.h>
 
+#include "main.h"
 #include "types_utils.h"
 #include "config_utils.h"
 #include "pid.h"
@@ -101,6 +102,16 @@ void task_velocity_control(void *pvParameters)
     // =================================================================
     
     while (1) {
+        // -------------------------------------------------------------
+        // 0. CHECK IF TUNING MODE IS ACTIVE
+        // -------------------------------------------------------------
+        
+        // Skip velocity control during wheel tuning (direct wheel control)
+        if (g_wheel_tuning_active) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+        
         // -------------------------------------------------------------
         // 1. RECEIVE DESIRED VELOCITY FROM TRAJECTORY TASK
         // -------------------------------------------------------------

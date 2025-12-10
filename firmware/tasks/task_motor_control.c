@@ -28,6 +28,7 @@
 
 #include "esp_timer.h"
 #include "esp_log.h"
+#include "main.h"
 #include "types_utils.h"
 #include "motor.h"
 #include "pid.h"
@@ -109,21 +110,32 @@ void task_motor_control(void *pvParameters)
         // 1. RECEIVE WHEEL TARGETS FROM QUEUE (Non-blocking)
         // -------------------------------------------------------------
         
-        // Try to get latest wheel targets from IK task
-        // Use short timeout to avoid blocking the control loop
-        if (xQueueReceive(g_wheel_target_queue, &wheel_targets, pdMS_TO_TICKS(1)) == pdTRUE) {
+        // Check if in wheel tuning mode
+        if (g_wheel_tuning_active) {
+            // TUNING MODE: Use uniform setpoint for all wheels
+            wheel_targets.phi_dot[0] = g_wheel_tuning_setpoint;
+            wheel_targets.phi_dot[1] = g_wheel_tuning_setpoint;
+            wheel_targets.phi_dot[2] = g_wheel_tuning_setpoint;
             targets_received = true;
             no_target_count = 0;
         } else {
-            // No new target - use previous values
-            // This is normal during steady-state operation
-            no_target_count++;
-            
-            // Warn if we haven't received targets for a while (>100ms)
-            if (no_target_count == 50 && !targets_received) {
-                ESP_LOGW(TAG, "No wheel targets received yet");
-            } else if (targets_received && no_target_count % 500 == 0) {
-                ESP_LOGW(TAG, "No new wheel targets for %" PRIu32 " cycles", no_target_count);
+            // NORMAL MODE: Receive targets from IK task
+            // Try to get latest wheel targets from IK task
+            // Use short timeout to avoid blocking the control loop
+            if (xQueueReceive(g_wheel_target_queue, &wheel_targets, pdMS_TO_TICKS(1)) == pdTRUE) {
+                targets_received = true;
+                no_target_count = 0;
+            } else {
+                // No new target - use previous values
+                // This is normal during steady-state operation
+                no_target_count++;
+                
+                // Warn if we haven't received targets for a while (>100ms)
+                if (no_target_count == 50 && !targets_received) {
+                    ESP_LOGW(TAG, "No wheel targets received yet");
+                } else if (targets_received && no_target_count % 500 == 0) {
+                    ESP_LOGW(TAG, "No new wheel targets for %" PRIu32 " cycles", no_target_count);
+                }
             }
         }
 
@@ -158,10 +170,13 @@ void task_motor_control(void *pvParameters)
         }
 
         // -------------------------------------------------------------
-        // 4. APPLY MOTOR COMMANDS
+        // 4. APPLY MOTOR COMMANDS & STORE OUTPUTS
         // -------------------------------------------------------------
         
         for (int i = 0; i < 3; i++) {
+            // Store PID output for telemetry
+            g_pid_outputs[i] = pid_output[i];
+            
             // Apply direction correction and set motor speed
             // motor_set_speed handles saturation and safety limits
             motor_set_speed(&g_motor[i], 

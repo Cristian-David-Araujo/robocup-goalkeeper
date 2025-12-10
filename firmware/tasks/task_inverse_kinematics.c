@@ -25,6 +25,7 @@
 #include "esp_log.h"
 #include <math.h>
 
+#include "main.h"
 #include "types_utils.h"
 #include "config_utils.h"
 #include "kinematics.h"
@@ -86,6 +87,16 @@ void task_inverse_kinematics(void *pvParameters)
     // =================================================================
     
     while (1) {
+        // -------------------------------------------------------------
+        // 0. CHECK IF TUNING MODE IS ACTIVE
+        // -------------------------------------------------------------
+        
+        // Skip IK during wheel tuning (direct wheel control)
+        if (g_wheel_tuning_active) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+        
         // -------------------------------------------------------------
         // 1. RECEIVE VELOCITY COMMAND FROM QUEUE
         // -------------------------------------------------------------

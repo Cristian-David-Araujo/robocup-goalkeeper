@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  pid-wheel-tuning:
+    build: .
+    container_name: pid-wheel-tuning-ui
+    ports:
+      - "8081:8081"
+    environment:
+      - PID_TUNING_HOST=0.0.0.0
+      - PID_TUNING_PORT=8081
+      - ROBOT_IP=${ROBOT_IP:-192.168.1.100}
+      - ROBOT_PORT=${ROBOT_PORT:-3333}
+      - SAMPLING_RATE_HZ=${SAMPLING_RATE_HZ:-50}
+      - MAX_WHEEL_VEL=${MAX_WHEEL_VEL:-50.0}
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./static:/app/static:ro
+      - ./logs:/app/logs
+    stdin_open: true
+    tty: true
