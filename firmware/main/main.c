@@ -96,6 +96,8 @@ SemaphoreHandle_t g_estimated_data_mutex = NULL;
 
 TaskHandle_t g_task_sensor_handle = NULL;
 TaskHandle_t g_task_control_handle = NULL;
+TaskHandle_t g_task_trajectory_handle = NULL;
+TaskHandle_t g_task_wifi_comm_handle = NULL;
 TaskHandle_t g_handle_parser_task = NULL;
 
 // =============================================================================
